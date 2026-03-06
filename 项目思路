@@ -1,0 +1,37 @@
+
+用户可以登陆 注册
+
+用户可以 通过添加 url 来添加视频源， 手动填入url，或者平台展示的视频url
+
+
+这个video url  能通过函数 自动变成clip
+
+clip 随机 展示 或者 顺序展示 以类似刷抖音的形式
+
+
+
+
+用户可以建立learning path， 通过 把长视频url 按顺序 作为path item 加入learning path
+
+也就是说可以吧clip 和 learning 注册为path item
+video 可以注册为learning path
+如果添加文档 ， 文档也可以注册为learning path
+
+这个 clip 可以作为 path item 的子item ， 可以实时记录 path 进度 。
+
+admin 推荐的path 平台提供的
+
+工具类 。。。。
+
+文档  学术论文 github代码阅读
+
+progress ？
+就是把learning path 里的path item 的观看记录展示出来 ， 通过观看时间点 来记录 ，通过标注的最小path item 编号来对应
+
+
+权限依赖
+用户 新建path 查看path 
+添加 url 到path 
+查看path progress
+点赞 clip 等  标注 clip 做笔记等
+所有用户的操作都需要权限

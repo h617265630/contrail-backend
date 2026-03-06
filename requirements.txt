@@ -1,0 +1,31 @@
+fastapi>=0.103.0
+uvicorn[standard]>=0.20.0
+sqlalchemy>=1.4
+sqlmodel>=0.0.6
+python-jose[cryptography]>=3.3.0
+# passlib 1.7.x 与部分新版 bcrypt 在初始化自检时会因 >72 bytes 密码限制抛错；
+# 固定到兼容版本避免启动时报 ValueError: password cannot be longer than 72 bytes
+passlib==1.7.4
+bcrypt==4.0.1
+psycopg2-binary>=2.9.0
+python-multipart>=0.0.5
+pydantic[email]>=2.6.0
+pydantic-settings>=2.2.0
+python-dotenv>=0.21.0
+
+google-auth>=2.26.0
+requests>=2.28.0
+
+# Extract metadata (YouTube)
+pytube>=15.0.0
+
+# Optional / dev dependencies (recommended for testing, migrations)
+alembic>=1.8.0   # 数据迁移
+pytest>=7.0.0
+httpx>=0.23.0
+pytest-asyncio>=0.20.0
+# requests>=2.28.0
+
+# Reader Mode (extract + sanitize)
+readability-lxml>=0.8.1
+bleach>=6.0.0
