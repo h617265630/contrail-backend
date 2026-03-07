@@ -26,9 +26,10 @@ def _parse_csv_env(name: str, default: str = "") -> list[str]:
 @dataclass
 class Settings:
 	# Database
+	# 默认连接本地 PostgreSQL，线上 Railway 通过环境变量 DATABASE_URL 指向 Supabase
 	DATABASE_URL: str = os.environ.get(
 		"DATABASE_URL",
-		"DATABASE_URL=postgresql://postgres:burnme@db.awcnbjotbtbuehtsirpc.supabase.co:5432/postgres",
+		"postgresql://postgres:burnme@localhost:5432/db",
 	)
 	SQL_ECHO: bool = os.environ.get("SQL_ECHO", "true").lower() in {"1", "true", "yes", "on"}
 
