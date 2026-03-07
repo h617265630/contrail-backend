@@ -28,7 +28,7 @@ class Settings:
 	# Database
 	DATABASE_URL: str = os.environ.get(
 		"DATABASE_URL",
-		"postgresql://postgres:burnme@localhost/db",
+		"DATABASE_URL=postgresql://postgres:burnme@db.awcnbjotbtbuehtsirpc.supabase.co:5432/postgres",
 	)
 	SQL_ECHO: bool = os.environ.get("SQL_ECHO", "true").lower() in {"1", "true", "yes", "on"}
 
