@@ -10,6 +10,7 @@ from app.routers import user_image
 from app.routers import user_file
 from app.routers import trending
 from app.routers.rbac import role, user, permission, user_role, role_permission
+from app.core.config import settings
 
 
 
@@ -47,21 +48,28 @@ Base.metadata.create_all(bind=engine)
 """
 Custom FastAPI app with local Swagger UI assets to avoid CDN timeouts.
 """
-app = FastAPI(title="User Management API", debug=True, docs_url=None, redoc_url=None)
+app = FastAPI(
+    title="User Management API",
+    debug=settings.APP_DEBUG,
+    docs_url=None,
+    redoc_url=None,
+)
 
 # 配置 CORS
 app.add_middleware(
     CORSMiddleware,
     # When allow_credentials=True, browsers reject Access-Control-Allow-Origin='*'.
     # Explicitly allow the Vite dev origins to prevent axios 'Network Error' caused by CORS.
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有方法
     allow_headers=["*"],  # 允许所有头
 )
+
+
+@app.get("/health", tags=["system"])
+def health_check():
+    return {"status": "ok"}
 
 # Serve local static files (e.g., Swagger UI assets) from backend/static.
 # Use an absolute path so the app can be started from any working directory.
