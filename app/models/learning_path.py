@@ -15,6 +15,7 @@ class LearningPath(Base):
     is_active = Column(Boolean, default=True)
 
     cover_image_url = Column(String(2048), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
 
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     category = relationship("Category")
