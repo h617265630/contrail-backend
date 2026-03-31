@@ -9,6 +9,7 @@ from app.routers import reader
 from app.routers import user_image
 from app.routers import user_file
 from app.routers import trending
+from app.routers import ai_path
 from app.routers.rbac import role, user, permission, user_role, role_permission
 from app.core.config import settings
 
@@ -61,6 +62,7 @@ app.add_middleware(
     # When allow_credentials=True, browsers reject Access-Control-Allow-Origin='*'.
     # Explicitly allow the Vite dev origins to prevent axios 'Network Error' caused by CORS.
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有方法
     allow_headers=["*"],  # 允许所有头
@@ -101,6 +103,7 @@ app.include_router(user_file.router)
 app.include_router(subscription.router)
 app.include_router(webhooks.router)
 app.include_router(trending.router)
+app.include_router(ai_path.router)
 
 @app.on_event("startup")
 async def startup_event():

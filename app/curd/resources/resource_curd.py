@@ -27,6 +27,16 @@ class ResourceCURD:
     # This dramatically reduces latency for repeated opens of the same resource detail.
     _EXTRACT_CACHE_TTL_SECONDS = 10 * 60
     _extract_cache: dict[str, tuple[float, dict]] = {}
+    _TITLE_MAX_LENGTH = 500
+
+    @staticmethod
+    def _normalize_title(value: str | None, fallback_url: str) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            raw = ResourceCURD._guess_title_from_url(fallback_url)
+        if len(raw) <= ResourceCURD._TITLE_MAX_LENGTH:
+            return raw
+        return raw[: ResourceCURD._TITLE_MAX_LENGTH - 1].rstrip() + "…"
 
     @staticmethod
     def _youtube_video_id(url: str) -> Optional[str]:
@@ -434,6 +444,8 @@ class ResourceCURD:
             return "document"
 
         host = (urlparse(raw).hostname or "").lower().removeprefix("www.")
+        if host.endswith("github.com"):
+            return "document"
 
         # Known video platforms
         if ResourceCURD._is_youtube(raw):
@@ -460,10 +472,6 @@ class ResourceCURD:
         # If HTML indicates an inline video player but missing OG tags, treat as video
         if meta.get("has_video"):
             return "video"
-
-        # GitHub is usually docs/technical content
-        if host.endswith("github.com"):
-            return "document"
 
         # Default
         return "article"
@@ -864,10 +872,14 @@ class ResourceCURD:
             platform = ResourceCURD._normalize_platform(host, None)
 
         # source_url is NOT unique per requirements.
+        normalized_title = ResourceCURD._normalize_title(
+            meta.get("title") or ResourceCURD._guess_title_from_url(normalized),
+            normalized,
+        )
         obj = Resource(
             resource_type=resource_type,
             platform=platform,
-            title=meta.get("title") or ResourceCURD._guess_title_from_url(normalized),
+            title=normalized_title,
             summary=meta.get("description"),
             source_url=normalized,
             thumbnail=meta.get("thumbnail_url"),
@@ -953,7 +965,7 @@ class ResourceCURD:
             t = title.strip()
             if not t:
                 raise ValueError("title cannot be empty")
-            obj.title = t
+            obj.title = ResourceCURD._normalize_title(t, obj.source_url or "")
 
         if summary is not None:
             obj.summary = summary.strip() or None
