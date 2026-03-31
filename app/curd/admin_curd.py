@@ -36,9 +36,7 @@ class AdminCURD:
         public_learning_paths = (
             db.query(func.count(LearningPath.id)).filter(LearningPath.is_public == True).scalar() or 0
         )
-        paths_last_7_days = (
-            db.query(func.count(LearningPath.id)).filter(LearningPath.created_at >= week_ago).scalar() or 0
-        )
+        paths_last_7_days = 0  # TODO: needs created_at column in learning_paths table
 
         total_resources = db.query(func.count(Resource.id)).scalar() or 0
         resources_last_7_days = (
