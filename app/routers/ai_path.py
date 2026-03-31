@@ -1,16 +1,10 @@
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-
-AIPATH_DIR = Path(__file__).resolve().parents[2] / "AIpath"
-if str(AIPATH_DIR) not in sys.path:
-    sys.path.insert(0, str(AIPATH_DIR))
 
 from learnpathly_langchain.service import generate_learning_path
 
