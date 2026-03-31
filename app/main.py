@@ -5,6 +5,7 @@ from pathlib import Path
 from app.routers import learning_path
 from app.routers import progress
 from app.routers import category
+from app.routers import admin
 from app.routers import reader
 from app.routers import user_image
 from app.routers import user_file
@@ -104,6 +105,7 @@ app.include_router(subscription.router)
 app.include_router(webhooks.router)
 app.include_router(trending.router)
 app.include_router(ai_path.router)
+app.include_router(admin.router)
 
 @app.on_event("startup")
 async def startup_event():
