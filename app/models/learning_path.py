@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String,DateTime,Boolean,Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.database import Base
-from datetime import datetime
 
 
 class LearningPath(Base):
@@ -15,7 +14,6 @@ class LearningPath(Base):
     is_active = Column(Boolean, default=True)
 
     cover_image_url = Column(String(2048), nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
 
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     category = relationship("Category")
