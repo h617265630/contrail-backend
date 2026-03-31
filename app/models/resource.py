@@ -26,7 +26,7 @@ class Resource(Base):
         nullable=False,
     )
     platform = Column(String(50), nullable=True)
-    title = Column(String(200), nullable=False)
+    title = Column(String(500), nullable=False)
     summary = Column(Text, nullable=True)
     source_url = Column(String(2048), nullable=False)
     thumbnail = Column(String(1000), nullable=True)
