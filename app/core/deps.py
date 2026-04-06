@@ -1,5 +1,5 @@
 # app/deps.py
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
@@ -8,12 +8,41 @@ from app import auth
 from app.curd.rbac.user_curd import UserCURD
 from app.core.config import settings
 from app.models.rbac.user import User
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
 def get_db_dep():
     yield from get_db()
+
+def get_current_user_optional(db: Session = Depends(get_db_dep), request: Request = None) -> Optional[User]:
+    """Optional auth: returns None if no valid token, instead of raising exception."""
+    # Extract token from Authorization header manually
+    auth_header = None
+    if request:
+        auth_header = request.headers.get("Authorization", "")
+
+    if not auth_header:
+        return None
+
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+
+    token = parts[1]
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            return None
+    except Exception:
+        return None
+
+    user = UserCURD.get_user(db, int(user_id))
+    return user
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db_dep)):
     try:

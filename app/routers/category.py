@@ -1,11 +1,12 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user_optional
 from app.core.deps import get_db_dep
 from app.models.category import Category
+from app.models.rbac.user import User
 from app.schemas.category import CategoryCreate, CategoryResponse
 
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 @router.get("/", response_model=List[CategoryResponse])
-def list_categories(db: Session = Depends(get_db_dep), current_user=Depends(get_current_user) = None):
+def list_categories(db: Session = Depends(get_db_dep), current_user: Optional[User] = Depends(get_current_user_optional)):
     # Public endpoint: if not authenticated, return only system categories
     # If authenticated, return system categories + user's own categories
     if current_user is None:
