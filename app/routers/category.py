@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user_optional
+from app.core.deps import get_current_user_optional, get_current_user
 from app.core.deps import get_db_dep
 from app.models.category import Category
 from app.models.rbac.user import User
