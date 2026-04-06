@@ -13,7 +13,16 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 @router.get("/", response_model=List[CategoryResponse])
-def list_categories(db: Session = Depends(get_db_dep), current_user=Depends(get_current_user)):
+def list_categories(db: Session = Depends(get_db_dep), current_user=Depends(get_current_user) = None):
+    # Public endpoint: if not authenticated, return only system categories
+    # If authenticated, return system categories + user's own categories
+    if current_user is None:
+        return (
+            db.query(Category)
+            .filter(Category.is_system.is_(True))
+            .order_by(Category.is_system.desc(), Category.id.asc())
+            .all()
+        )
     return (
         db.query(Category)
         .filter((Category.is_system.is_(True)) | (Category.owner_user_id == current_user.id))
