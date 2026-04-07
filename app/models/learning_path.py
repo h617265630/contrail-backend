@@ -10,10 +10,13 @@ class LearningPath(Base):
     title = Column(String(200), nullable=False)
     type = Column(String(50), nullable=True)
     description = Column(Text, nullable=True)
-    is_public = Column(Boolean, default=True)
+    is_public = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
 
     cover_image_url = Column(String(2048), nullable=True)
+
+    # 创建者 ID：NULL=系统/管理员创建，creator_id == user_id=用户创建
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     category = relationship("Category")
@@ -35,3 +38,10 @@ class LearningPath(Base):
             return getattr(self.category, "name", None)
         except Exception:
             return None
+
+    @property
+    def item_count(self) -> int:
+        try:
+            return len(self.path_items) if hasattr(self, "path_items") and self.path_items else 0
+        except Exception:
+            return 0

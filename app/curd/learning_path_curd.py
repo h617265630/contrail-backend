@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from app.models.learning_path import LearningPath
 from app.models.category import Category
 from app.models.user_learning_path import UserLearningPath
@@ -35,6 +35,7 @@ class LearningPathCURD:
             is_public=bool(is_public),
             cover_image_url=cover_image_url,
             category_id=category_id,
+            creator_id=user_id,  # 标记创建者
         )
         db.add(learning_path)
         db.commit()
@@ -57,23 +58,43 @@ class LearningPathCURD:
             db.query(LearningPath)
             .filter(LearningPath.is_public.is_(True))
             .filter(LearningPath.is_active.is_(True))
+            .options(joinedload(LearningPath.path_items))
             .offset(skip)
             .limit(limit)
             .all()
         )
-    
+
     @staticmethod
-    def get_learning_paths_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[LearningPath]:
+    def get_learning_paths_by_user(
+        db: Session, user_id: int, skip: int = 0, limit: int = 100
+    ) -> List[LearningPath]:
         learning_paths = (
             db.query(LearningPath)
             .join(UserLearningPath, UserLearningPath.learning_path_id == LearningPath.id)
             .filter(UserLearningPath.user_id == user_id)
+            .options(joinedload(LearningPath.path_items))
             .offset(skip)
             .limit(limit)
             .all()
         )
         return learning_paths
-    
+
+    @staticmethod
+    def get_learning_paths_by_user_with_assoc(
+        db: Session, user_id: int, skip: int = 0, limit: int = 100
+    ) -> List[Tuple[LearningPath, UserLearningPath]]:
+        """返回 (LearningPath, UserLearningPath) 对，用于合并 custom_* 覆盖字段"""
+        rows = (
+            db.query(LearningPath, UserLearningPath)
+            .join(UserLearningPath, UserLearningPath.learning_path_id == LearningPath.id)
+            .filter(UserLearningPath.user_id == user_id)
+            .options(joinedload(LearningPath.path_items))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return rows
+
 
     @staticmethod
     def get_learning_path(db: Session, learning_path_id: int) -> Optional[LearningPath]:
@@ -115,6 +136,63 @@ class LearningPathCURD:
         except Exception as e:
             db.rollback()
             raise ValueError(f"Failed to delete learning path: {e}")
+
+    @staticmethod
+    def update_user_learning_path(
+        db: Session,
+        user_id: int,
+        learning_path_id: int,
+        custom_title: Optional[str] = None,
+        custom_description: Optional[str] = None,
+        custom_cover_image_url: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Tuple[LearningPath, UserLearningPath]:
+        """更新用户收藏路径。
+
+        逻辑：
+        - 用户是创建者（creator_id == user_id）：直接修改 LearningPath 原始字段
+        - 用户是收藏者：写入 UserLearningPath.custom_* 覆盖字段，不影响原始路径
+        """
+        lp = db.query(LearningPath).filter(LearningPath.id == learning_path_id).first()
+        if not lp:
+            raise ValueError("Learning path not found")
+
+        assoc = (
+            db.query(UserLearningPath)
+            .filter(
+                UserLearningPath.user_id == user_id,
+                UserLearningPath.learning_path_id == learning_path_id,
+            )
+            .first()
+        )
+        if not assoc:
+            raise ValueError("UserLearningPath association not found")
+
+        is_creator = getattr(lp, "creator_id", None) == user_id
+
+        if is_creator:
+            # 创建者 → 直接修改 LearningPath
+            if custom_title is not None:
+                lp.title = custom_title.strip()
+            if custom_description is not None:
+                lp.description = custom_description.strip() or None
+            if custom_cover_image_url is not None:
+                lp.cover_image_url = custom_cover_image_url.strip() or None
+            db.add(lp)
+        else:
+            # 收藏者 → 写入 custom_* 覆盖字段
+            if custom_title is not None:
+                assoc.custom_title = custom_title.strip() or None
+            if custom_description is not None:
+                assoc.custom_description = custom_description.strip() or None
+            if custom_cover_image_url is not None:
+                assoc.custom_cover_image_url = custom_cover_image_url.strip() or None
+            if notes is not None:
+                assoc.notes = notes.strip() or None
+            db.add(assoc)
+
+        db.flush()
+        return lp, assoc
 
     # ---------- PathItem 相关 CRUD ----------  还要修改
     @staticmethod

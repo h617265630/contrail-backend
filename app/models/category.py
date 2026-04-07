@@ -1,14 +1,16 @@
 # 生成一个Categories模型的示例代码
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.db.database import Base    
+from app.db.database import Base
+
+
 class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, index=True, nullable=False)
-    code = Column(String(50), unique=True, index=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    code = Column(String(50), nullable=False)
     parent_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
     level = Column(Integer, default=0)  # 0表示顶级分类
     description = Column(Text, nullable=True)
@@ -19,6 +21,14 @@ class Category(Base):
 
     parent = relationship("Category", remote_side=[id], backref="children")
     owner = relationship("User", foreign_keys=[owner_user_id])
+
+    # 联合唯一约束：同一 owner 下 name/code 不能重复
+    # 系统分类（owner_user_id=NULL）通过 DB 层唯一约束保证
+    # 用户自定义分类通过同一 (name/code, owner_user_id) 组合唯一保证
+    __table_args__ = (
+        UniqueConstraint('name', 'owner_user_id', name='uq_category_name_owner'),
+        UniqueConstraint('code', 'owner_user_id', name='uq_category_code_owner'),
+    )
 
     def __repr__(self):
         return f"<Category(id={self.id}, name='{self.name}', level={self.level})>"

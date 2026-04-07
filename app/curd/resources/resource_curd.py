@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.parse import urlparse
 from html import unescape
 import re
@@ -955,43 +955,81 @@ class ResourceCURD:
         difficulty: Optional[int] = None,
         tags: Optional[dict] = None,
         raw_meta: Optional[dict] = None,
-    ) -> Resource:
+    ) -> Tuple[Resource, UserResource]:
+        """更新用户收藏资源。
+
+        逻辑：
+        - 如果用户是资源的创建者（creator_id == user_id），直接修改 Resource 表（私有资源）
+        - 如果是收藏的公共资源，写入 UserResource.custom_* 覆盖字段，不影响原始资源
+        """
         items = ResourceCURD.list_for_user(db, user_id=user_id)
         obj = next((r for r in items if r.id == resource_id), None)
         if not obj:
             raise ValueError("resource not found")
 
-        if title is not None:
-            t = title.strip()
-            if not t:
-                raise ValueError("title cannot be empty")
-            obj.title = ResourceCURD._normalize_title(t, obj.source_url or "")
+        assoc = (
+            db.query(UserResource)
+            .filter(
+                UserResource.user_id == user_id,
+                UserResource.resource_id == resource_id,
+            )
+            .first()
+        )
+        if not assoc:
+            raise ValueError("user_resource association not found")
 
-        if summary is not None:
-            obj.summary = summary.strip() or None
+        is_creator = getattr(obj, "creator_id", None) == user_id
 
-        if platform is not None:
-            obj.platform = platform.strip() or None
+        if is_creator:
+            # 用户自己创建的资源 → 直接修改 Resource
+            if title is not None:
+                t = title.strip()
+                if not t:
+                    raise ValueError("title cannot be empty")
+                obj.title = ResourceCURD._normalize_title(t, obj.source_url or "")
 
-        if thumbnail is not None:
-            obj.thumbnail = thumbnail.strip() or None
+            if summary is not None:
+                obj.summary = summary.strip() or None
 
-        if category_id is not None:
-            cat = db.query(Category).filter(Category.id == int(category_id)).first()
-            if not cat:
-                raise ValueError("Category not found")
-            obj.category_id = int(category_id)
+            if platform is not None:
+                obj.platform = platform.strip() or None
 
-        if difficulty is not None:
-            obj.difficulty = int(difficulty)
+            if thumbnail is not None:
+                obj.thumbnail = thumbnail.strip() or None
 
-        if tags is not None:
-            obj.tags = tags
+            if category_id is not None:
+                cat = db.query(Category).filter(Category.id == int(category_id)).first()
+                if not cat:
+                    raise ValueError("Category not found")
+                obj.category_id = int(category_id)
 
-        if raw_meta is not None:
-            obj.raw_meta = raw_meta
+            if difficulty is not None:
+                obj.difficulty = int(difficulty)
 
-        db.add(obj)
+            if tags is not None:
+                obj.tags = tags
+
+            if raw_meta is not None:
+                obj.raw_meta = raw_meta
+
+            db.add(obj)
+        else:
+            # 收藏的公共资源 → 写入 custom_* 覆盖字段
+            if title is not None:
+                t = title.strip()
+                if not t:
+                    assoc.custom_title = None
+                else:
+                    assoc.custom_title = t
+
+            if summary is not None:
+                assoc.custom_summary = summary.strip() or None
+
+            if thumbnail is not None:
+                assoc.custom_thumbnail = thumbnail.strip() or None
+
+            db.add(assoc)
+
         db.flush()
-        return obj
+        return obj, assoc
 

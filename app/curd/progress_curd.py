@@ -15,7 +15,6 @@ class ProgressCURD:
         return (
             db.query(Progress)
             .filter(Progress.user_id == user_id, Progress.path_item_id == path_item_id)
-            .order_by(Progress.id.desc())
             .first()
         )
 
@@ -54,6 +53,8 @@ class ProgressCURD:
             # Never decrease progress.
             obj.progress_percentage = max(int(obj.progress_percentage or 0), pct)
             obj.last_watched_time = now
+            if pct >= 100 and obj.completed_at is None:
+                obj.completed_at = now
             db.add(obj)
             return obj
 
@@ -62,6 +63,7 @@ class ProgressCURD:
             path_item_id=path_item_id,
             progress_percentage=pct,
             last_watched_time=now,
+            completed_at=now if pct >= 100 else None,
         )
         db.add(obj)
         return obj

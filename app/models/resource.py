@@ -36,6 +36,9 @@ class Resource(Base):
     raw_meta = Column(JSON, nullable=True)
     is_system_public = Column(Boolean, default=False, nullable=False)
 
+    # 创建者 ID：NULL 表示系统/管理员创建的资源，非 NULL 表示用户创建
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     community_score = Column(Integer, default=0, nullable=False)
     save_count = Column(Integer, default=0, nullable=False)
     trending_score = Column(Integer, default=0, nullable=False)

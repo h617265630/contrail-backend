@@ -22,6 +22,7 @@ class ResourceUpdateRequest(BaseModel):
     tags: Optional[dict[str, Any]] = None
     raw_meta: Optional[dict[str, Any]] = None
     manual_weight: Optional[int] = None
+    is_public: Optional[bool] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -58,6 +59,7 @@ class ResourceResponse(BaseModel):
     tags: Optional[dict[str, Any]] = None
     raw_meta: Optional[dict[str, Any]] = None
     is_system_public: Optional[bool] = None
+    creator_id: Optional[int] = None
 
     manual_weight: Optional[int] = None
     behavior_weight: Optional[int] = None

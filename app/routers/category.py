@@ -42,9 +42,23 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db_dep), 
     if not code:
         code = name.lower().replace(" ", "-")
 
-    exists = db.query(Category).filter(Category.code == code).first()
-    if exists:
-        raise HTTPException(status_code=400, detail="Category code already exists")
+    # 系统分类中检查 code 是否已存在（全局唯一）
+    sys_exists = (
+        db.query(Category)
+        .filter(Category.is_system.is_(True), Category.code == code)
+        .first()
+    )
+    if sys_exists:
+        raise HTTPException(status_code=400, detail="Category code already exists in system categories")
+
+    # 用户自定义分类中检查同一 owner 下是否重复
+    user_exists = (
+        db.query(Category)
+        .filter(Category.owner_user_id == current_user.id, Category.code == code)
+        .first()
+    )
+    if user_exists:
+        raise HTTPException(status_code=400, detail="You already have a category with this code")
 
     obj = Category(
         name=name,
