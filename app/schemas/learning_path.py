@@ -19,6 +19,7 @@ class LearningPathBase(BaseModel):
     cover_image_url: Optional[str] = None
     category_id: int
     category_name: Optional[str] = None
+    creator_id: Optional[int] = None
 
     model_config = {
         "from_attributes": True
@@ -44,6 +45,26 @@ class LearningPathUpdate(BaseModel):
     }
 
 
+class UserLearningPathFields(BaseModel):
+    """UserLearningPath 覆盖字段，用于用户自定义收藏路径的展示"""
+    custom_title: Optional[str] = None
+    custom_description: Optional[str] = None
+    custom_cover_image_url: Optional[str] = None
+    notes: Optional[str] = None
+    added_at: Optional[str] = None
+    is_pinned: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class LearningPathWithUserOverride(LearningPathBase):
+    """带用户覆盖字段的路径响应（用于 list/get 用户路径时）"""
+    user_override: UserLearningPathFields | None = None
+    item_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
 class PathItemInLearningPathResponse(BaseModel):
     id: int
     learning_path_id: int
@@ -66,6 +87,7 @@ class PathItemInLearningPathResponse(BaseModel):
 class LearningPathResponse(LearningPathBase):
     id: int
     is_active: bool = True
+    item_count: int = 0
 
     model_config = {
         "from_attributes": True
@@ -101,4 +123,12 @@ class LearningPathAttachResponse(BaseModel):
         "from_attributes": True
     }
 
-    
+
+class UpdateUserLearningPathRequest(BaseModel):
+    """用户更新收藏路径的请求：写入 UserLearningPath.custom_* 覆盖字段"""
+    custom_title: Optional[str] = None
+    custom_description: Optional[str] = None
+    custom_cover_image_url: Optional[str] = None
+    notes: Optional[str] = None
+
+    model_config = {"from_attributes": True}

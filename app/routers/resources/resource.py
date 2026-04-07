@@ -100,19 +100,26 @@ def get_my_resource_detail(resource_id: int, db: Session = Depends(get_db_dep), 
     except Exception:
         db.rollback()
 
+    # 合并值：custom_* 优先，否则用原始 Resource
+    display_title = getattr(assoc, "custom_title", None) or obj.title
+    display_summary = getattr(assoc, "custom_summary", None) or getattr(obj, "summary", None)
+    display_thumbnail = getattr(assoc, "custom_thumbnail", None) or getattr(obj, "thumbnail", None)
+
     return ResourceDetailResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
         platform=getattr(obj, "platform", None),
-        title=obj.title,
-        summary=getattr(obj, "summary", None),
+        title=display_title,
+        summary=display_summary,
         source_url=getattr(obj, "source_url", None),
-        thumbnail=getattr(obj, "thumbnail", None),
+        thumbnail=display_thumbnail,
         category_id=getattr(obj, "category_id", None),
         category_name=getattr(obj, "category_name", None),
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
+        is_system_public=getattr(obj, "is_system_public", None),
+        creator_id=getattr(obj, "creator_id", None),
         manual_weight=getattr(assoc, "manual_weight", None),
         behavior_weight=getattr(assoc, "behavior_weight", None),
         effective_weight=getattr(assoc, "effective_weight", None),
@@ -144,20 +151,24 @@ def list_my_resources(db: Session = Depends(get_db_dep), current_user=Depends(ge
     seq_map: dict[int, int] = {}
     for seq, (r, _ur) in enumerate(sorted_items, start=1):
         seq_map[r.id] = seq
+
     return [
         ResourceResponse(
             id=r.id,
             resource_type=_resource_type_value(r),
             platform=getattr(r, "platform", None),
-            title=r.title,
-            summary=getattr(r, "summary", None),
+            # 合并值：custom_* 优先，否则用原始 Resource
+            title=getattr(ur, "custom_title", None) or r.title,
+            summary=getattr(ur, "custom_summary", None) or getattr(r, "summary", None),
             source_url=getattr(r, "source_url", None),
-            thumbnail=getattr(r, "thumbnail", None),
+            thumbnail=getattr(ur, "custom_thumbnail", None) or getattr(r, "thumbnail", None),
             category_id=getattr(r, "category_id", None),
             category_name=getattr(r, "category_name", None),
             difficulty=getattr(r, "difficulty", None),
             tags=getattr(r, "tags", None),
             raw_meta=getattr(r, "raw_meta", None),
+            is_system_public=getattr(r, "is_system_public", None),
+            creator_id=getattr(r, "creator_id", None),
             manual_weight=getattr(ur, "manual_weight", None),
             behavior_weight=getattr(ur, "behavior_weight", None),
             effective_weight=getattr(ur, "effective_weight", None),
@@ -398,7 +409,8 @@ def update_my_resource(
     current_user=Depends(get_current_user),
 ):
     try:
-        obj = ResourceCURD.update_for_user(
+        # update_for_user 返回 (Resource, UserResource)
+        obj, assoc = ResourceCURD.update_for_user(
             db,
             user_id=current_user.id,
             resource_id=resource_id,
@@ -412,17 +424,12 @@ def update_my_resource(
             raw_meta=payload.raw_meta,
         )
 
-        assoc = (
-            db.query(UserResource)
-            .filter(UserResource.user_id == current_user.id, UserResource.resource_id == resource_id)
-            .first()
-        )
-        if not assoc:
-            raise ValueError("user_resource association not found")
-
         if payload.manual_weight is not None:
             assoc.manual_weight = int(payload.manual_weight)
             assoc.effective_weight = int(payload.manual_weight)
+
+        if payload.is_public is not None:
+            assoc.is_public = payload.is_public
 
         db.commit()
         db.refresh(obj)
@@ -439,32 +446,33 @@ def update_my_resource(
         db.rollback()
         raise HTTPException(status_code=400, detail=f"更新失败: {e}")
 
-    assoc = (
-        db.query(UserResource)
-        .filter(UserResource.user_id == current_user.id, UserResource.resource_id == resource_id)
-        .first()
-    )
+    # 读取合并后的值：custom_* 优先，否则用原始 Resource 值
+    display_title = getattr(assoc, "custom_title", None) or obj.title
+    display_summary = getattr(assoc, "custom_summary", None) or getattr(obj, "summary", None)
+    display_thumbnail = getattr(assoc, "custom_thumbnail", None) or getattr(obj, "thumbnail", None)
 
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
         platform=getattr(obj, "platform", None),
-        title=obj.title,
-        summary=getattr(obj, "summary", None),
+        title=display_title,
+        summary=display_summary,
         source_url=getattr(obj, "source_url", None),
-        thumbnail=getattr(obj, "thumbnail", None),
+        thumbnail=display_thumbnail,
         category_id=getattr(obj, "category_id", None),
         category_name=getattr(obj, "category_name", None),
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
-        manual_weight=getattr(assoc, "manual_weight", None) if assoc else None,
-        behavior_weight=getattr(assoc, "behavior_weight", None) if assoc else None,
-        effective_weight=getattr(assoc, "effective_weight", None) if assoc else None,
-        added_at=getattr(assoc, "added_at", None) if assoc else None,
-        last_opened=getattr(assoc, "last_opened", None) if assoc else None,
-        open_count=getattr(assoc, "open_count", None) if assoc else None,
-        completion_status=getattr(assoc, "completion_status", None) if assoc else None,
+        is_system_public=getattr(obj, "is_system_public", None),
+        creator_id=getattr(obj, "creator_id", None),
+        manual_weight=getattr(assoc, "manual_weight", None),
+        behavior_weight=getattr(assoc, "behavior_weight", None),
+        effective_weight=getattr(assoc, "effective_weight", None),
+        added_at=getattr(assoc, "added_at", None),
+        last_opened=getattr(assoc, "last_opened", None),
+        open_count=getattr(assoc, "open_count", None),
+        completion_status=getattr(assoc, "completion_status", None),
         community_score=getattr(obj, "community_score", None),
         save_count=getattr(obj, "save_count", None),
         trending_score=getattr(obj, "trending_score", None),

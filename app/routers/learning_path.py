@@ -13,6 +13,9 @@ from app.schemas.learning_path import (
 	AddResourceToLearningPathRequest,
 	ResourceKind,
 	LearningPathAttachResponse,
+	UpdateUserLearningPathRequest,
+	LearningPathWithUserOverride,
+	UserLearningPathFields,
 )
 from app.curd.learning_path_curd import LearningPathCURD
 from app.curd.path_item_curd import PathItemCURD
@@ -134,14 +137,88 @@ def get_public_learning_path_detail(
 	)
 
 
-@router.get("/", response_model=List[LearningPathResponse])
+@router.get("/", response_model=List[LearningPathWithUserOverride])
 def list_learning_paths(
 	skip: int = Query(0, ge=0),
 	limit: int = Query(100, ge=1, le=200),
 	db: Session = Depends(get_db_dep),
 	current_user=Depends(get_current_user),
 ):
-	return LearningPathCURD.get_learning_paths_by_user(db, current_user.id, skip=skip, limit=limit)
+	rows = LearningPathCURD.get_learning_paths_by_user_with_assoc(db, current_user.id, skip=skip, limit=limit)
+	return [
+		LearningPathWithUserOverride(
+			id=lp.id,
+			title=getattr(assoc, "custom_title", None) or lp.title,
+			type=getattr(lp, "type", None),
+			description=getattr(assoc, "custom_description", None) or getattr(lp, "description", None),
+			is_public=getattr(lp, "is_public", False),
+			cover_image_url=getattr(assoc, "custom_cover_image_url", None) or getattr(lp, "cover_image_url", None),
+			category_id=getattr(lp, "category_id", None),
+			category_name=getattr(lp, "category_name", None),
+			creator_id=getattr(lp, "creator_id", None),
+			is_active=getattr(lp, "is_active", True),
+			item_count=getattr(lp, "item_count", 0),
+			user_override=UserLearningPathFields(
+				custom_title=getattr(assoc, "custom_title", None),
+				custom_description=getattr(assoc, "custom_description", None),
+				custom_cover_image_url=getattr(assoc, "custom_cover_image_url", None),
+				notes=getattr(assoc, "notes", None),
+				added_at=str(getattr(assoc, "added_at", None) or "") or None,
+				is_pinned=getattr(assoc, "is_pinned", 0),
+			),
+		)
+		for lp, assoc in rows
+	]
+
+
+@router.patch("/me/{learning_path_id}", response_model=LearningPathWithUserOverride)
+def update_my_learning_path(
+	learning_path_id: int,
+	payload: UpdateUserLearningPathRequest,
+	db: Session = Depends(get_db_dep),
+	current_user=Depends(get_current_user),
+):
+	try:
+		lp, assoc = LearningPathCURD.update_user_learning_path(
+			db,
+			user_id=current_user.id,
+			learning_path_id=learning_path_id,
+			custom_title=payload.custom_title,
+			custom_description=payload.custom_description,
+			custom_cover_image_url=payload.custom_cover_image_url,
+			notes=payload.notes,
+		)
+		db.commit()
+		db.refresh(lp)
+		db.refresh(assoc)
+	except ValueError as e:
+		db.rollback()
+		raise HTTPException(status_code=404, detail=str(e))
+	except Exception as e:
+		db.rollback()
+		raise HTTPException(status_code=400, detail=f"更新失败: {e}")
+
+	return LearningPathWithUserOverride(
+		id=lp.id,
+		title=getattr(assoc, "custom_title", None) or lp.title,
+		type=getattr(lp, "type", None),
+		description=getattr(assoc, "custom_description", None) or getattr(lp, "description", None),
+		is_public=getattr(lp, "is_public", False),
+		cover_image_url=getattr(assoc, "custom_cover_image_url", None) or getattr(lp, "cover_image_url", None),
+		category_id=getattr(lp, "category_id", None),
+		category_name=getattr(lp, "category_name", None),
+		creator_id=getattr(lp, "creator_id", None),
+		is_active=getattr(lp, "is_active", True),
+		item_count=getattr(lp, "item_count", 0),
+		user_override=UserLearningPathFields(
+			custom_title=getattr(assoc, "custom_title", None),
+			custom_description=getattr(assoc, "custom_description", None),
+			custom_cover_image_url=getattr(assoc, "custom_cover_image_url", None),
+			notes=getattr(assoc, "notes", None),
+			added_at=str(getattr(assoc, "added_at", None) or "") or None,
+			is_pinned=getattr(assoc, "is_pinned", 0),
+		),
+	)
 
 
 @router.post("/me/{learning_path_id}/attach", response_model=LearningPathAttachResponse)
