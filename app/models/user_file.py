@@ -21,4 +21,4 @@ class UserFile(Base):
     content = Column(Text, nullable=True)
 
     file_url = Column(String(2048), nullable=False)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)

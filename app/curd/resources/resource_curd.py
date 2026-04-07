@@ -812,7 +812,7 @@ class ResourceCURD:
                 is_public=is_public,
                 manual_weight=default_weight,
                 effective_weight=default_weight,
-                added_at=datetime.now(),
+                added_at=datetime.utcnow(),
                 open_count=0,
                 completion_status=False,
             )
@@ -962,8 +962,7 @@ class ResourceCURD:
         - 如果用户是资源的创建者（creator_id == user_id），直接修改 Resource 表（私有资源）
         - 如果是收藏的公共资源，写入 UserResource.custom_* 覆盖字段，不影响原始资源
         """
-        items = ResourceCURD.list_for_user(db, user_id=user_id)
-        obj = next((r for r in items if r.id == resource_id), None)
+        obj = db.query(Resource).filter(Resource.id == resource_id).first()
         if not obj:
             raise ValueError("resource not found")
 

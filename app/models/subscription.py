@@ -21,8 +21,8 @@ class Subscription(Base):
     current_period_end = Column(DateTime, nullable=True)
     cancel_at_period_end = Column(Boolean, nullable=False, default=False)
 
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
         UniqueConstraint("user_id", "provider", name="uq_subscription_user_provider"),

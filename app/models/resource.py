@@ -43,7 +43,7 @@ class Resource(Base):
     save_count = Column(Integer, default=0, nullable=False)
     trending_score = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     # 关系：Resource 可以关联多个 PathItem
     path_items = relationship("PathItem", back_populates="resource")

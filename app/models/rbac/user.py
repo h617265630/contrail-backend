@@ -16,8 +16,8 @@ class User(Base):
     display_name = Column(String(100))
     avatar_url = Column(String(500))
     bio = Column(Text)
-    created_at = Column(DateTime,default=datetime.now)
-    updated_at = Column(DateTime,default=datetime.now,onupdate=datetime.now)
+    created_at = Column(DateTime,default=datetime.utcnow)
+    updated_at = Column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=1)  # 1 for active, 0 for inactive
     is_superuser = Column(Boolean, default=False)  # 1 for superuser, 0 for regular user
     

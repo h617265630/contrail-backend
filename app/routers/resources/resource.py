@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_db_dep
 from app.curd.resources.resource_curd import ResourceCURD
@@ -143,6 +143,7 @@ def list_my_resources(db: Session = Depends(get_db_dep), current_user=Depends(ge
         db.query(Resource, UserResource)
         .join(UserResource, UserResource.resource_id == Resource.id)
         .filter(UserResource.user_id == current_user.id)
+        .options(joinedload(Resource.category))
         .order_by(Resource.id.desc())
         .all()
     )

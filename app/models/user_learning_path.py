@@ -18,6 +18,6 @@ class UserLearningPath(Base):
     notes = Column(Text, nullable=True)  # 用户对这条路径的备注
 
     # 补充缺失字段
-    added_at = Column(DateTime, default=datetime.now, nullable=False)
+    added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     is_pinned = Column(Integer, default=0, nullable=False)  # 0=不置顶, 1=置顶
 
