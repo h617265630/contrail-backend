@@ -17,7 +17,7 @@ class Category(Base):
     is_leaf = Column(Boolean, default=1)  # 1表示是叶子节点，0表示不是叶子节点
     is_system = Column(Boolean, default=True, nullable=False)
     owner_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     parent = relationship("Category", remote_side=[id], backref="children")
     owner = relationship("User", foreign_keys=[owner_user_id])

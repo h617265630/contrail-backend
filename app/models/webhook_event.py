@@ -18,7 +18,7 @@ class WebhookEvent(Base):
     payload_json = Column(Text, nullable=False, default="{}")
     headers_json = Column(Text, nullable=False, default="{}")
 
-    received_at = Column(DateTime, nullable=False, default=datetime.now)
+    received_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     processed = Column(Boolean, nullable=False, default=False)
     error = Column(Text, nullable=True)

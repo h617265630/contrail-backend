@@ -10,7 +10,7 @@ class WatchHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     video_id = Column(Integer, ForeignKey('videos.id'))
-    watch_time = Column(DateTime, default=datetime.now)
+    watch_time = Column(DateTime, default=datetime.utcnow)
     is_watched = Column(Boolean, default=False)
     # 关联到用户和视频表
     user = relationship("User", back_populates="watch_history")

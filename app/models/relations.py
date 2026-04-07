@@ -9,7 +9,7 @@ class UserFollow(Base):
     
     follower_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     following_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     # 关系（自引用）
     follower = relationship("User", foreign_keys=[follower_id], backref="following")

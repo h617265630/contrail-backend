@@ -19,13 +19,13 @@ class UserResource(Base):
     custom_summary = Column(Text, nullable=True)
     custom_thumbnail = Column(String(1000), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     manual_weight = Column(Integer, nullable=True)
     behavior_weight = Column(Integer, nullable=True)
     effective_weight = Column(Integer, nullable=True)
 
-    added_at = Column(DateTime, default=datetime.now)
+    added_at = Column(DateTime, default=datetime.utcnow)
     last_opened = Column(DateTime, nullable=True)
     open_count = Column(Integer, default=0, nullable=False)
     completion_status = Column(Boolean, default=False, nullable=False)
