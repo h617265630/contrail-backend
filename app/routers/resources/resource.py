@@ -249,6 +249,7 @@ def create_my_resource(payload: ResourceCreateFromUrl, db: Session = Depends(get
             category_id=payload.category_id,
             is_system_public=False,
             is_public=payload.is_public,
+            visibility=payload.visibility or "private",
             manual_weight=payload.manual_weight,
         )
         db.commit()
@@ -279,6 +280,10 @@ def create_my_resource(payload: ResourceCreateFromUrl, db: Session = Depends(get
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
+        is_system_public=getattr(obj, "is_system_public", None),
+        creator_id=getattr(obj, "creator_id", None),
+        visibility=getattr(obj, "visibility", None),
+        source=getattr(assoc, "source", None) if assoc else None,
         manual_weight=getattr(assoc, "manual_weight", None) if assoc else None,
         behavior_weight=getattr(assoc, "behavior_weight", None) if assoc else None,
         effective_weight=getattr(assoc, "effective_weight", None) if assoc else None,
@@ -304,7 +309,7 @@ def add_public_resource_to_my_resources(
         raise HTTPException(status_code=404, detail="resource not found")
 
     try:
-        ResourceCURD.attach_to_user(db, user_id=current_user.id, resource_id=obj.id)
+        ResourceCURD.attach_to_user(db, user_id=current_user.id, resource_id=obj.id, source="saved")
         db.commit()
     except Exception as e:
         db.rollback()
@@ -329,6 +334,10 @@ def add_public_resource_to_my_resources(
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
+        is_system_public=getattr(obj, "is_system_public", None),
+        creator_id=getattr(obj, "creator_id", None),
+        visibility=getattr(obj, "visibility", None),
+        source=getattr(assoc, "source", None) if assoc else None,
         manual_weight=getattr(assoc, "manual_weight", None) if assoc else None,
         behavior_weight=getattr(assoc, "behavior_weight", None) if assoc else None,
         effective_weight=getattr(assoc, "effective_weight", None) if assoc else None,
@@ -361,11 +370,17 @@ def add_public_resource_to_my_resources_with_status(
     )
 
     try:
-        ResourceCURD.attach_to_user(db, user_id=current_user.id, resource_id=obj.id)
+        ResourceCURD.attach_to_user(db, user_id=current_user.id, resource_id=obj.id, source="saved")
         db.commit()
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"添加失败: {e}")
+
+    assoc = (
+        db.query(UserResource)
+        .filter(UserResource.user_id == current_user.id, UserResource.resource_id == obj.id)
+        .first()
+    )
 
     return ResourceAttachResponse(
         already_exists=already_exists,
@@ -382,6 +397,10 @@ def add_public_resource_to_my_resources_with_status(
             difficulty=getattr(obj, "difficulty", None),
             tags=getattr(obj, "tags", None),
             raw_meta=getattr(obj, "raw_meta", None),
+            is_system_public=getattr(obj, "is_system_public", None),
+            creator_id=getattr(obj, "creator_id", None),
+            visibility=getattr(obj, "visibility", None),
+            source=getattr(assoc, "source", None) if assoc else None,
             created_at=getattr(obj, "created_at", None),
         ),
     )

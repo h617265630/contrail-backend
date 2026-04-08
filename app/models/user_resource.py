@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Boolean
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -10,6 +10,13 @@ class UserResource(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     resource_id = Column(Integer, ForeignKey("resources.id"), primary_key=True)
+
+    # 来源：created=用户自己创建，saved=从公共池添加
+    source = Column(
+        Enum("created", "saved", name="user_resource_source"),
+        nullable=False,
+        default="saved",
+    )
 
     # 用户可见性：是否在个人主页/分享页面展示
     is_public = Column(Boolean, default=False, nullable=False)
