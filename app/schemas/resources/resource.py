@@ -1,12 +1,13 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, HttpUrl, Field
+from pydantic import BaseModel, ConfigDict, HttpUrl
 
 
 class ResourceCreateFromUrl(BaseModel):
     url: HttpUrl
     category_id: int
+    visibility: Optional[str] = "private"  # "private" | "public"
     is_public: Optional[bool] = False
     manual_weight: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
@@ -60,6 +61,8 @@ class ResourceResponse(BaseModel):
     raw_meta: Optional[dict[str, Any]] = None
     is_system_public: Optional[bool] = None
     creator_id: Optional[int] = None
+    visibility: Optional[str] = None   # "private" | "public" | None(系统资源)
+    source: Optional[str] = None       # "created" | "saved" | None
 
     manual_weight: Optional[int] = None
     behavior_weight: Optional[int] = None

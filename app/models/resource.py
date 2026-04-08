@@ -11,6 +11,10 @@ class ResourceType(enum.Enum):
     ARTICLE = "article"
     CLIP = "clip"
 
+class ResourceVisibility(enum.Enum):
+    PRIVATE = "private"
+    PUBLIC = "public"
+
 class Resource(Base):
     __tablename__ = "resources"
     
@@ -36,8 +40,23 @@ class Resource(Base):
     raw_meta = Column(JSON, nullable=True)
     is_system_public = Column(Boolean, default=False, nullable=False)
 
+    # 用户创建资源时的可见性意图：private=仅自己可见，public=申请进入公共池
+    # NULL 表示系统/管理员创建的资源（不适用此字段）
+    visibility = Column(
+        Enum("private", "public", name="resource_visibility"),
+        nullable=True,
+        default=None,
+    )
+
     # 创建者 ID：NULL 表示系统/管理员创建的资源，非 NULL 表示用户创建
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    # 用户创建资源时的可见性意图：private=仅自己可见，public=申请进入公共池
+    visibility = Column(
+        Enum("private", "public", name="resource_visibility"),
+        nullable=False,
+        default="private",
+    )
 
     community_score = Column(Integer, default=0, nullable=False)
     save_count = Column(Integer, default=0, nullable=False)

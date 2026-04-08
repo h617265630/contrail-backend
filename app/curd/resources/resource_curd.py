@@ -771,13 +771,14 @@ class ResourceCURD:
         return meta
 
     @staticmethod
-    def attach_to_user(db: Session, *, user_id: int, resource_id: int, is_public: bool = False) -> None:
+    def attach_to_user(db: Session, *, user_id: int, resource_id: int, is_public: bool = False, source: str = "saved") -> None:
         ResourceCURD.attach_to_user_with_weight(
             db,
             user_id=user_id,
             resource_id=resource_id,
             is_public=is_public,
             manual_weight=None,
+            source=source,
         )
 
     @staticmethod
@@ -788,6 +789,7 @@ class ResourceCURD:
         resource_id: int,
         is_public: bool = False,
         manual_weight: Optional[int] = None,
+        source: str = "saved",
     ) -> None:
         hit = (
             db.query(UserResource)
@@ -810,6 +812,7 @@ class ResourceCURD:
                 user_id=user_id,
                 resource_id=resource_id,
                 is_public=is_public,
+                source=source,
                 manual_weight=default_weight,
                 effective_weight=default_weight,
                 added_at=datetime.utcnow(),
@@ -851,6 +854,7 @@ class ResourceCURD:
         category_id: int,
         is_system_public: bool = False,
         is_public: bool = False,
+        visibility: str = "private",
         manual_weight: Optional[int] = None,
     ) -> Resource:
         meta = ResourceCURD.extract_from_url(url)
@@ -897,6 +901,8 @@ class ResourceCURD:
                 "twitter_player": meta.get("twitter_player"),
             },
             is_system_public=is_system_public,
+            visibility=visibility,
+            creator_id=user_id,
         )
         db.add(obj)
         db.flush()
@@ -925,6 +931,7 @@ class ResourceCURD:
             resource_id=obj.id,
             is_public=is_public,
             manual_weight=manual_weight,
+            source="created",
         )
         return obj
 
