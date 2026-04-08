@@ -27,6 +27,17 @@ class ResourceUpdateRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserResourceProfileUpdateRequest(BaseModel):
+    """用户个性化字段：与 Resource 固定字段隔离，仅影响 user_resource 表"""
+    category_id: Optional[int] = None  # 覆盖原始分类，0 或 null 表示清除覆盖
+    custom_notes: Optional[str] = None
+    custom_tags: Optional[dict[str, Any]] = None
+    personal_rating: Optional[int] = None  # 1-5
+    is_favorite: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class VideoInfo(BaseModel):
     duration: Optional[int] = None
     channel: Optional[str] = None
@@ -71,6 +82,13 @@ class ResourceResponse(BaseModel):
     last_opened: Optional[datetime] = None
     open_count: Optional[int] = None
     completion_status: Optional[bool] = None
+
+    # 二次修改扩展字段
+    category_id: Optional[int] = None  # 用户自定义分类覆盖（NULL 时用原始 resources.category_id）
+    custom_notes: Optional[str] = None
+    custom_tags: Optional[dict[str, Any]] = None
+    personal_rating: Optional[int] = None
+    is_favorite: Optional[bool] = None
 
     community_score: Optional[int] = None
     save_count: Optional[int] = None

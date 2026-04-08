@@ -58,6 +58,7 @@ class LearningPathCURD:
             db.query(LearningPath)
             .filter(LearningPath.is_public.is_(True))
             .filter(LearningPath.is_active.is_(True))
+            .filter(LearningPath.status == "published")
             .options(joinedload(LearningPath.path_items))
             .offset(skip)
             .limit(limit)
@@ -284,3 +285,66 @@ class LearningPathCURD:
             .first()
         )
         return lp
+
+    @staticmethod
+    def fork_learning_path(
+        db: Session,
+        source_path_id: int,
+        user_id: int,
+    ) -> LearningPath:
+        """Fork 一条 learning path，返回新 path"""
+        source = db.query(LearningPath).filter(LearningPath.id == source_path_id).first()
+        if not source:
+            raise ValueError("Learning path not found")
+
+        # root_id：如果 source 本身是 fork 来的，沿用它的 root；否则 source 就是 root
+        root_id = source.root_id if source.root_id else source.id
+
+        # 1. 创建新 path
+        new_path = LearningPath(
+            title=source.title,
+            type=source.type,
+            description=source.description,
+            is_public=False,
+            is_active=True,
+            cover_image_url=source.cover_image_url,
+            category_id=source.category_id,
+            creator_id=user_id,
+            parent_id=source.id,
+            root_id=root_id,
+            status="draft",
+        )
+        db.add(new_path)
+        db.flush()  # 获取 new_path.id
+
+        # 2. 深拷贝 path_items
+        for item in source.path_items:
+            new_item = PathItem(
+                learning_path_id=new_path.id,
+                resource_id=item.resource_id,
+                order_index=item.order_index,
+                stage=item.stage,
+                purpose=item.purpose,
+                estimated_time=item.estimated_time,
+                is_optional=item.is_optional,
+            )
+            db.add(new_item)
+
+        # 3. 创建用户关联
+        user_lp = UserLearningPath(user_id=user_id, learning_path_id=new_path.id)
+        db.add(user_lp)
+
+        # 4. 记录 fork 关系 + 更新计数
+        from app.models.learning_path_fork import LearningPathFork
+        fork_record = LearningPathFork(
+            source_path_id=source.id,
+            forked_path_id=new_path.id,
+            user_id=user_id,
+        )
+        db.add(fork_record)
+
+        source.fork_count = (source.fork_count or 0) + 1
+
+        db.commit()
+        db.refresh(new_path)
+        return new_path

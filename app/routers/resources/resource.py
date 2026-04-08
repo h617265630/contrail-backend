@@ -20,6 +20,7 @@ from app.schemas.resources.resource import (
     ResourceDetailResponse,
     ResourceResponse,
     ResourceUpdateRequest,
+    UserResourceProfileUpdateRequest,
     VideoInfo,
 )
 
@@ -100,20 +101,15 @@ def get_my_resource_detail(resource_id: int, db: Session = Depends(get_db_dep), 
     except Exception:
         db.rollback()
 
-    # 合并值：custom_* 优先，否则用原始 Resource
-    display_title = getattr(assoc, "custom_title", None) or obj.title
-    display_summary = getattr(assoc, "custom_summary", None) or getattr(obj, "summary", None)
-    display_thumbnail = getattr(assoc, "custom_thumbnail", None) or getattr(obj, "thumbnail", None)
-
     return ResourceDetailResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
         platform=getattr(obj, "platform", None),
-        title=display_title,
-        summary=display_summary,
+        title=obj.title,
+        summary=getattr(obj, "summary", None),
         source_url=getattr(obj, "source_url", None),
-        thumbnail=display_thumbnail,
-        category_id=getattr(obj, "category_id", None),
+        thumbnail=getattr(obj, "thumbnail", None),
+        category_id=getattr(assoc, "category_id", None) or getattr(obj, "category_id", None),
         category_name=getattr(obj, "category_name", None),
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
@@ -131,6 +127,10 @@ def get_my_resource_detail(resource_id: int, db: Session = Depends(get_db_dep), 
         save_count=getattr(obj, "save_count", None),
         trending_score=getattr(obj, "trending_score", None),
         created_at=getattr(obj, "created_at", None),
+        custom_notes=getattr(assoc, "custom_notes", None),
+        custom_tags=getattr(assoc, "custom_tags", None),
+        personal_rating=getattr(assoc, "personal_rating", None),
+        is_favorite=getattr(assoc, "is_favorite", False),
         video=VideoInfo.model_validate(obj.video) if getattr(obj, "video", None) else None,
         doc=DocInfo.model_validate(obj.doc) if getattr(obj, "doc", None) else None,
         article=ArticleInfo.model_validate(obj.article) if getattr(obj, "article", None) else None,
@@ -158,12 +158,11 @@ def list_my_resources(db: Session = Depends(get_db_dep), current_user=Depends(ge
             id=r.id,
             resource_type=_resource_type_value(r),
             platform=getattr(r, "platform", None),
-            # 合并值：custom_* 优先，否则用原始 Resource
-            title=getattr(ur, "custom_title", None) or r.title,
-            summary=getattr(ur, "custom_summary", None) or getattr(r, "summary", None),
+            title=r.title,
+            summary=getattr(r, "summary", None),
             source_url=getattr(r, "source_url", None),
-            thumbnail=getattr(ur, "custom_thumbnail", None) or getattr(r, "thumbnail", None),
-            category_id=getattr(r, "category_id", None),
+            thumbnail=getattr(r, "thumbnail", None),
+            category_id=getattr(ur, "category_id", None) or getattr(r, "category_id", None),
             category_name=getattr(r, "category_name", None),
             difficulty=getattr(r, "difficulty", None),
             tags=getattr(r, "tags", None),
@@ -182,6 +181,10 @@ def list_my_resources(db: Session = Depends(get_db_dep), current_user=Depends(ge
             trending_score=getattr(r, "trending_score", None),
             created_at=getattr(r, "created_at", None),
             user_seq=seq_map.get(r.id),
+            custom_notes=getattr(ur, "custom_notes", None),
+            custom_tags=getattr(ur, "custom_tags", None),
+            personal_rating=getattr(ur, "personal_rating", None),
+            is_favorite=getattr(ur, "is_favorite", False),
         )
         for r, ur in items
     ]
@@ -421,6 +424,71 @@ def delete_my_resource(resource_id: int, db: Session = Depends(get_db_dep), curr
     return None
 
 
+@router.patch("/me/{resource_id}/profile", response_model=ResourceResponse)
+def update_user_resource_profile(
+    resource_id: int,
+    payload: UserResourceProfileUpdateRequest,
+    db: Session = Depends(get_db_dep),
+    current_user=Depends(get_current_user),
+):
+    """更新用户收藏资源的个性化字段（与 Resource 固定字段隔离）"""
+    obj = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="resource not found")
+
+    try:
+        assoc = ResourceCURD.update_user_resource_profile(
+            db,
+            user_id=current_user.id,
+            resource_id=resource_id,
+            category_id=payload.category_id if payload.category_id is not None and payload.category_id > 0 else None,
+            custom_notes=payload.custom_notes,
+            custom_tags=payload.custom_tags,
+            personal_rating=payload.personal_rating,
+            is_favorite=payload.is_favorite,
+        )
+        db.commit()
+        db.refresh(assoc)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"更新失败: {e}")
+
+    return ResourceResponse(
+        id=obj.id,
+        resource_type=_resource_type_value(obj),
+        platform=getattr(obj, "platform", None),
+        title=obj.title,
+        summary=getattr(obj, "summary", None),
+        source_url=getattr(obj, "source_url", None),
+        thumbnail=getattr(obj, "thumbnail", None),
+        category_id=getattr(assoc, "category_id", None) or getattr(obj, "category_id", None),
+        category_name=getattr(obj, "category_name", None),
+        difficulty=getattr(obj, "difficulty", None),
+        tags=getattr(obj, "tags", None),
+        raw_meta=getattr(obj, "raw_meta", None),
+        is_system_public=getattr(obj, "is_system_public", None),
+        creator_id=getattr(obj, "creator_id", None),
+        manual_weight=getattr(assoc, "manual_weight", None),
+        behavior_weight=getattr(assoc, "behavior_weight", None),
+        effective_weight=getattr(assoc, "effective_weight", None),
+        added_at=getattr(assoc, "added_at", None),
+        last_opened=getattr(assoc, "last_opened", None),
+        open_count=getattr(assoc, "open_count", None),
+        completion_status=getattr(assoc, "completion_status", None),
+        community_score=getattr(obj, "community_score", None),
+        save_count=getattr(obj, "save_count", None),
+        trending_score=getattr(obj, "trending_score", None),
+        created_at=getattr(obj, "created_at", None),
+        custom_notes=getattr(assoc, "custom_notes", None),
+        custom_tags=getattr(assoc, "custom_tags", None),
+        personal_rating=getattr(assoc, "personal_rating", None),
+        is_favorite=getattr(assoc, "is_favorite", False),
+    )
+
+
 @router.patch("/me/{resource_id}", response_model=ResourceResponse)
 def update_my_resource(
     resource_id: int,
@@ -466,20 +534,15 @@ def update_my_resource(
         db.rollback()
         raise HTTPException(status_code=400, detail=f"更新失败: {e}")
 
-    # 读取合并后的值：custom_* 优先，否则用原始 Resource 值
-    display_title = getattr(assoc, "custom_title", None) or obj.title
-    display_summary = getattr(assoc, "custom_summary", None) or getattr(obj, "summary", None)
-    display_thumbnail = getattr(assoc, "custom_thumbnail", None) or getattr(obj, "thumbnail", None)
-
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
         platform=getattr(obj, "platform", None),
-        title=display_title,
-        summary=display_summary,
+        title=obj.title,
+        summary=getattr(obj, "summary", None),
         source_url=getattr(obj, "source_url", None),
-        thumbnail=display_thumbnail,
-        category_id=getattr(obj, "category_id", None),
+        thumbnail=getattr(obj, "thumbnail", None),
+        category_id=getattr(assoc, "category_id", None) or getattr(obj, "category_id", None),
         category_name=getattr(obj, "category_name", None),
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
@@ -497,6 +560,10 @@ def update_my_resource(
         save_count=getattr(obj, "save_count", None),
         trending_score=getattr(obj, "trending_score", None),
         created_at=getattr(obj, "created_at", None),
+        custom_notes=getattr(assoc, "custom_notes", None),
+        custom_tags=getattr(assoc, "custom_tags", None),
+        personal_rating=getattr(assoc, "personal_rating", None),
+        is_favorite=getattr(assoc, "is_favorite", False),
     )
 
 
