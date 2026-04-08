@@ -21,6 +21,15 @@ class LearningPathBase(BaseModel):
     category_name: Optional[str] = None
     creator_id: Optional[int] = None
 
+    # Fork lineage
+    parent_id: Optional[int] = None
+    root_id: Optional[int] = None
+    status: Optional[str] = None
+    published_at: Optional[str] = None
+    fork_count: int = 0
+    like_count: int = 0
+    view_count: int = 0
+
     model_config = {
         "from_attributes": True
     }

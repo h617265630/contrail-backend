@@ -10,6 +10,7 @@ __all__ = [
     "User",
     "Category",
     "LearningPath",
+    "LearningPathFork",
     "PathItem",
     "UserLearningPath",
 ]

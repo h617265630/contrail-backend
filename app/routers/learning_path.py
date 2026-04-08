@@ -94,6 +94,21 @@ def list_public_learning_paths(
 	return LearningPathCURD.list_public_learning_paths(db, skip=skip, limit=limit)
 
 
+@router.post("/{learning_path_id}/fork", response_model=LearningPathResponse, status_code=status.HTTP_201_CREATED)
+def fork_learning_path(
+	learning_path_id: int,
+	db: Session = Depends(get_db_dep),
+	current_user=Depends(get_current_user),
+):
+	try:
+		lp = LearningPathCURD.fork_learning_path(db, source_path_id=learning_path_id, user_id=current_user.id)
+	except ValueError as e:
+		raise HTTPException(status_code=404, detail=str(e))
+	except Exception as e:
+		raise HTTPException(status_code=400, detail=f"Fork failed: {e}")
+	return lp
+
+
 @router.get("/public/{learning_path_id}", response_model=LearningPathDetailResponse)
 def get_public_learning_path_detail(
 	learning_path_id: int,

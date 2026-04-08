@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Boolean
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Boolean, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -21,10 +21,14 @@ class UserResource(Base):
     # 用户可见性：是否在个人主页/分享页面展示
     is_public = Column(Boolean, default=False, nullable=False)
 
-    # 用户自定义覆盖字段（不为 NULL 时，优先于 Resource 原始值显示）
-    custom_title = Column(String(500), nullable=True)
-    custom_summary = Column(Text, nullable=True)
-    custom_thumbnail = Column(String(1000), nullable=True)
+    # 用户自定义分类（覆盖 resources.category_id，NULL 时用原始分类）
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+
+    # 二次修改扩展字段
+    custom_notes = Column(Text, nullable=True)      # 个人笔记
+    custom_tags = Column(JSON, nullable=True)         # 个人标签（不污染原始 tags）
+    personal_rating = Column(Integer, nullable=True)  # 个人评分 1-5
+    is_favorite = Column(Boolean, default=False, nullable=False)  # 收藏标记
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -39,6 +43,7 @@ class UserResource(Base):
 
     user = relationship("User", back_populates="user_resources")
     resource = relationship("Resource", back_populates="user_resources")
+    category = relationship("Category")
 
     __table_args__ = (
         UniqueConstraint("user_id", "resource_id", name="uq_user_resource"),

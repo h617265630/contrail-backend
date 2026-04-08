@@ -962,12 +962,16 @@ class ResourceCURD:
         difficulty: Optional[int] = None,
         tags: Optional[dict] = None,
         raw_meta: Optional[dict] = None,
+        custom_notes: Optional[str] = None,
+        custom_tags: Optional[dict] = None,
+        personal_rating: Optional[int] = None,
+        is_favorite: Optional[bool] = None,
     ) -> Tuple[Resource, UserResource]:
         """更新用户收藏资源。
 
         逻辑：
-        - 如果用户是资源的创建者（creator_id == user_id），直接修改 Resource 表（私有资源）
-        - 如果是收藏的公共资源，写入 UserResource.custom_* 覆盖字段，不影响原始资源
+        - 如果用户是资源的创建者（creator_id == user_id），直接修改 Resource 表
+        - 如果是收藏的公共资源：固定字段（title/summary/url）不可改，只改 user_resource 个性化字段
         """
         obj = db.query(Resource).filter(Resource.id == resource_id).first()
         if not obj:
@@ -1019,23 +1023,72 @@ class ResourceCURD:
                 obj.raw_meta = raw_meta
 
             db.add(obj)
-        else:
-            # 收藏的公共资源 → 写入 custom_* 覆盖字段
-            if title is not None:
-                t = title.strip()
-                if not t:
-                    assoc.custom_title = None
-                else:
-                    assoc.custom_title = t
 
-            if summary is not None:
-                assoc.custom_summary = summary.strip() or None
+        # 以下字段无论是创建者还是收藏者，都写入 user_resource
+        # 收藏者的固定字段（title/summary/thumbnail）已在 model 层删掉，这里不再处理
 
-            if thumbnail is not None:
-                assoc.custom_thumbnail = thumbnail.strip() or None
+        if custom_notes is not None:
+            assoc.custom_notes = custom_notes.strip() or None
 
-            db.add(assoc)
+        if custom_tags is not None:
+            assoc.custom_tags = custom_tags
 
+        if personal_rating is not None:
+            assoc.personal_rating = int(personal_rating) if personal_rating > 0 else None
+
+        if is_favorite is not None:
+            assoc.is_favorite = bool(is_favorite)
+
+        db.add(assoc)
         db.flush()
         return obj, assoc
+
+    @staticmethod
+    def update_user_resource_profile(
+        db: Session,
+        *,
+        user_id: int,
+        resource_id: int,
+        category_id: Optional[int] = None,
+        custom_notes: Optional[str] = None,
+        custom_tags: Optional[dict] = None,
+        personal_rating: Optional[int] = None,
+        is_favorite: Optional[bool] = None,
+    ) -> UserResource:
+        """更新用户收藏资源的个性化字段（与 Resource 固定字段隔离）"""
+        assoc = (
+            db.query(UserResource)
+            .filter(
+                UserResource.user_id == user_id,
+                UserResource.resource_id == resource_id,
+            )
+            .first()
+        )
+        if not assoc:
+            raise ValueError("user_resource association not found")
+
+        if category_id is not None:
+            if category_id > 0:
+                cat = db.query(Category).filter(Category.id == int(category_id)).first()
+                if not cat:
+                    raise ValueError("Category not found")
+                assoc.category_id = int(category_id)
+            else:
+                assoc.category_id = None
+
+        if custom_notes is not None:
+            assoc.custom_notes = custom_notes.strip() or None
+
+        if custom_tags is not None:
+            assoc.custom_tags = custom_tags
+
+        if personal_rating is not None:
+            assoc.personal_rating = int(personal_rating) if personal_rating > 0 else None
+
+        if is_favorite is not None:
+            assoc.is_favorite = bool(is_favorite)
+
+        db.add(assoc)
+        db.flush()
+        return assoc
 

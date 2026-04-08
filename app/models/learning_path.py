@@ -1,6 +1,13 @@
-from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, DateTime, Enum
 from sqlalchemy.orm import relationship
 from app.db.database import Base
+import enum
+
+
+class PathStatus(str, enum.Enum):
+    draft = "draft"
+    published = "published"
+    archived = "archived"
 
 
 class LearningPath(Base):
@@ -19,13 +26,23 @@ class LearningPath(Base):
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
+
+    # Fork lineage
+    parent_id = Column(Integer, ForeignKey("learning_paths.id", ondelete="SET NULL"), nullable=True, index=True)
+    root_id = Column(Integer, ForeignKey("learning_paths.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # 发布状态
+    status = Column(Enum(PathStatus), nullable=False, default=PathStatus.draft)
+    published_at = Column(DateTime, nullable=True)
+
+    # 统计字段
+    fork_count = Column(Integer, nullable=False, default=0)
+    like_count = Column(Integer, nullable=False, default=0)
+    view_count = Column(Integer, nullable=False, default=0)
+
     category = relationship("Category")
-    # relationships 
-    #users - learning_paths 多对多关系
-    users = relationship("User",back_populates="learning_paths",secondary="user_learning_paths")
-    #path_items -learnging_paths 多对多关系
-    path_items = relationship("PathItem", back_populates="learning_path",order_by="PathItem.order_index")
-    # 评论关系
+    users = relationship("User", back_populates="learning_paths", secondary="user_learning_paths")
+    path_items = relationship("PathItem", back_populates="learning_path", order_by="PathItem.order_index")
     comments = relationship("LearningPathComment", back_populates="learning_path", cascade="all, delete-orphan")
 
 
