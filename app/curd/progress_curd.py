@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.path_item import PathItem
 from app.models.progress import Progress
+from app.models.user_learning_path import UserLearningPath
 
 
 class ProgressCURD:
@@ -65,3 +66,35 @@ class ProgressCURD:
         )
         db.add(obj)
         return obj
+
+    @staticmethod
+    def check_user_owns_learning_path(
+        db: Session, *, user_id: int, learning_path_id: int
+    ) -> bool:
+        """Check if user owns (has attached) the learning path. Returns True if owned."""
+        assoc = (
+            db.query(UserLearningPath)
+            .filter(
+                UserLearningPath.user_id == user_id,
+                UserLearningPath.learning_path_id == learning_path_id,
+            )
+            .first()
+        )
+        return assoc is not None
+
+    @staticmethod
+    def get_path_item(db: Session, path_item_id: int) -> Optional[PathItem]:
+        """Get a path item by ID."""
+        return db.query(PathItem).filter(PathItem.id == path_item_id).first()
+
+    @staticmethod
+    def list_path_item_ids(db: Session, learning_path_id: int) -> List[int]:
+        """Get all path item IDs for a learning path."""
+        return [
+            pid
+            for (pid,) in (
+                db.query(PathItem.id)
+                .filter(PathItem.learning_path_id == learning_path_id)
+                .all()
+            )
+        ]

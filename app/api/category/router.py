@@ -7,14 +7,17 @@ from app.core.deps import get_current_user_optional, get_current_user
 from app.core.deps import get_db_dep
 from app.models.category import Category
 from app.models.rbac.user import User
-from app.schemas.category import CategoryCreate, CategoryResponse
+from app.api.category.schemas import CategoryCreate, CategoryResponse
 
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 @router.get("/", response_model=List[CategoryResponse])
-def list_categories(db: Session = Depends(get_db_dep), current_user: Optional[User] = Depends(get_current_user_optional)):
+def list_categories(
+    db: Session = Depends(get_db_dep),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
     # Public endpoint: if not authenticated, return only system categories
     # If authenticated, return system categories + user's own categories
     if current_user is None:
@@ -26,14 +29,20 @@ def list_categories(db: Session = Depends(get_db_dep), current_user: Optional[Us
         )
     return (
         db.query(Category)
-        .filter((Category.is_system.is_(True)) | (Category.owner_user_id == current_user.id))
+        .filter(
+            (Category.is_system.is_(True)) | (Category.owner_user_id == current_user.id)
+        )
         .order_by(Category.is_system.desc(), Category.id.asc())
         .all()
     )
 
 
 @router.post("/", response_model=CategoryResponse)
-def create_category(payload: CategoryCreate, db: Session = Depends(get_db_dep), current_user=Depends(get_current_user)):
+def create_category(
+    payload: CategoryCreate,
+    db: Session = Depends(get_db_dep),
+    current_user=Depends(get_current_user),
+):
     name = (payload.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -44,7 +53,7 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db_dep), 
 
     exists = db.query(Category).filter(Category.code == code).first()
     if exists:
-        raise HTTPException(status_code=400, detail="Category code already exists")
+        raise HTTPException(status_code=409, detail="Category code already exists")
 
     obj = Category(
         name=name,

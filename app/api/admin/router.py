@@ -4,7 +4,7 @@ from typing import Optional
 
 from app.core.deps import get_db_dep, get_current_user, PermissionChecker
 from app.models.rbac.user import User
-from app.schemas.admin import (
+from app.api.admin.schemas import (
     AdminStatsResponse,
     AdminUserListResponse,
     AdminLearningPathListResponse,
@@ -19,8 +19,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 def require_superuser(current_user: User = Depends(get_current_user)):
     if not current_user.is_superuser:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )
     return current_user
 
@@ -46,7 +45,12 @@ async def get_admin_users(
 ):
     """Get paginated user list with filters"""
     users, total = AdminCURD.get_users(
-        db, skip=skip, limit=limit, search=search, is_active=is_active, is_superuser=is_superuser
+        db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        is_active=is_active,
+        is_superuser=is_superuser,
     )
     return AdminUserListResponse(users=users, total=total, skip=skip, limit=limit)
 
@@ -72,11 +76,16 @@ async def toggle_superuser_status(
 ):
     """Toggle user superuser status - superuser only"""
     if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot modify your own superuser status")
+        raise HTTPException(
+            status_code=400, detail="Cannot modify your own superuser status"
+        )
     user = AdminCURD.toggle_superuser_status(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"message": "User superuser status updated", "is_superuser": user.is_superuser}
+    return {
+        "message": "User superuser status updated",
+        "is_superuser": user.is_superuser,
+    }
 
 
 @router.get("/learning-paths", response_model=AdminLearningPathListResponse)
