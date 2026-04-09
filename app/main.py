@@ -2,34 +2,35 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from pathlib import Path
-from app.routers import learning_path
-from app.routers import progress
-from app.routers import category
-from app.routers import admin
+from app.api.learning_path.router import router as learning_path_router
+from app.api.progress.router import router as progress_router
+from app.api.category.router import router as category_router
+from app.api.admin.router import router as admin_router
 from app.routers import reader
 from app.routers import user_image
 from app.routers import user_file
-from app.routers import trending
-from app.routers import ai_path
+from app.api.trending.router import router as trending_router
+from app.api.ai_path.router import router as ai_path_router
 from app.routers.rbac import role, user, permission, user_role, role_permission
 from app.core.config import settings
 
 
-
-
 from app.db.database import engine, Base
+
 # Ensure rbac model modules (including association classes) are imported so
 # SQLAlchemy can resolve relationships that reference mapped classes/tables.
 import app.models.rbac.associations
 import app.models.rbac.user
 import app.models.rbac.role
 import app.models.rbac.permission
+
 # 确保关联/中间表与关系类被加载，避免字符串解析失败
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import SessionLocal
 from app.core.initial_data import init_default_data
 from app.routers.resources import product, resource
-from app.routers import subscription, webhooks
+from app.api.subscription.router import router as subscription_router
+from app.api.webhooks.router import router as webhooks_router
 
 # Ensure generic resource models are imported before create_all
 import app.models.user_resource
@@ -45,6 +46,7 @@ import app.models.user_image
 import app.models.user_file
 import app.models.subscription
 import app.models.webhook_event
+
 Base.metadata.create_all(bind=engine)
 
 """
@@ -74,10 +76,12 @@ app.add_middleware(
 def health_check():
     return {"status": "ok"}
 
+
 # Serve local static files (e.g., Swagger UI assets) from backend/static.
 # Use an absolute path so the app can be started from any working directory.
 _STATIC_DIR = (Path(__file__).resolve().parents[1] / "static").as_posix()
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
 
 # Custom /docs using local swagger-ui assets
 @app.get("/docs", include_in_schema=False)
@@ -88,10 +92,12 @@ def custom_swagger_ui():
         swagger_js_url="/static/swagger/swagger-ui-bundle.js",
         swagger_css_url="/static/swagger/swagger-ui.css",
     )
+
+
 app.include_router(user.router)
-app.include_router(learning_path.router)
-app.include_router(progress.router)
-app.include_router(category.router)
+app.include_router(learning_path_router)
+app.include_router(progress_router)
+app.include_router(category_router)
 app.include_router(reader.router)
 app.include_router(product.router)
 app.include_router(resource.router)
@@ -101,11 +107,12 @@ app.include_router(user_role.router)
 app.include_router(role_permission.router)
 app.include_router(user_image.router)
 app.include_router(user_file.router)
-app.include_router(subscription.router)
-app.include_router(webhooks.router)
-app.include_router(trending.router)
-app.include_router(ai_path.router)
-app.include_router(admin.router)
+app.include_router(subscription_router)
+app.include_router(webhooks_router)
+app.include_router(trending_router)
+app.include_router(ai_path_router)
+app.include_router(admin_router)
+
 
 @app.on_event("startup")
 async def startup_event():

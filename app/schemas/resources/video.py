@@ -1,13 +1,13 @@
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VideoBase(BaseModel):
     title: str
     description: Optional[str] = None
     file_path: str
-    file_size: int
-    duration: float
+    file_size: int = Field(ge=0)
+    duration: float = Field(ge=0)
     model_config = ConfigDict(from_attributes=True)
 
 class VideoCreate(VideoBase):

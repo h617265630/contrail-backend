@@ -8,6 +8,7 @@ from app.models.path_item import PathItem
 from app.models.resource import Resource
 from app.models.progress import Progress
 
+
 class LearningPathCURD:
     @staticmethod
     def create_learning_path(
@@ -35,13 +36,16 @@ class LearningPathCURD:
             is_public=bool(is_public),
             cover_image_url=cover_image_url,
             category_id=category_id,
+            creator_id=user_id,
         )
         db.add(learning_path)
         db.commit()
         db.refresh(learning_path)
 
         # 创建关联记录
-        user_learning_path = UserLearningPath(user_id=user_id, learning_path_id=learning_path.id)
+        user_learning_path = UserLearningPath(
+            user_id=user_id, learning_path_id=learning_path.id
+        )
         try:
             db.add(user_learning_path)
             db.commit()
@@ -52,36 +56,41 @@ class LearningPathCURD:
         return learning_path
 
     @staticmethod
-    def list_public_learning_paths(db: Session, skip: int = 0, limit: int = 100) -> List[LearningPath]:
+    def list_public_learning_paths(
+        db: Session, skip: int = 0, limit: int = 100
+    ) -> List[LearningPath]:
         return (
             db.query(LearningPath)
             .filter(LearningPath.is_public.is_(True))
             .filter(LearningPath.is_active.is_(True))
+            .filter(LearningPath.status == "published")
             .offset(skip)
             .limit(limit)
             .all()
         )
-    
+
     @staticmethod
-    def get_learning_paths_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[LearningPath]:
+    def get_learning_paths_by_user(
+        db: Session, user_id: int, skip: int = 0, limit: int = 100
+    ) -> List[LearningPath]:
         learning_paths = (
             db.query(LearningPath)
-            .join(UserLearningPath, UserLearningPath.learning_path_id == LearningPath.id)
+            .join(
+                UserLearningPath, UserLearningPath.learning_path_id == LearningPath.id
+            )
             .filter(UserLearningPath.user_id == user_id)
             .offset(skip)
             .limit(limit)
             .all()
         )
         return learning_paths
-    
 
     @staticmethod
     def get_learning_path(db: Session, learning_path_id: int) -> Optional[LearningPath]:
-        return db.query(LearningPath).filter(LearningPath.id == learning_path_id).first()
-    
+        return (
+            db.query(LearningPath).filter(LearningPath.id == learning_path_id).first()
+        )
 
-
-    
     @staticmethod
     def delete_learning_path(db: Session, learning_path: LearningPath) -> None:
         try:
@@ -98,20 +107,28 @@ class LearningPathCURD:
                 if x is not None
             ]
             if path_item_ids:
-                db.query(Progress).filter(Progress.path_item_id.in_(path_item_ids)).delete(synchronize_session=False)
+                db.query(Progress).filter(
+                    Progress.path_item_id.in_(path_item_ids)
+                ).delete(synchronize_session=False)
 
             # 2) Delete join table associations.
-            db.query(UserLearningPath).filter(UserLearningPath.learning_path_id == lp_id).delete(synchronize_session=False)
+            db.query(UserLearningPath).filter(
+                UserLearningPath.learning_path_id == lp_id
+            ).delete(synchronize_session=False)
 
             # 3) Delete path items.
-            db.query(PathItem).filter(PathItem.learning_path_id == lp_id).delete(synchronize_session=False)
+            db.query(PathItem).filter(PathItem.learning_path_id == lp_id).delete(
+                synchronize_session=False
+            )
 
             # 4) Finally delete the learning path.
             db.delete(learning_path)
             db.commit()
         except IntegrityError as e:
             db.rollback()
-            raise ValueError(f"Failed to delete learning path due to integrity constraints: {e}")
+            raise ValueError(
+                f"Failed to delete learning path due to integrity constraints: {e}"
+            )
         except Exception as e:
             db.rollback()
             raise ValueError(f"Failed to delete learning path: {e}")
@@ -165,7 +182,9 @@ class LearningPathCURD:
             db.refresh(item)
         except IntegrityError:
             db.rollback()
-            raise ValueError("Duplicate path item: order_index or resource already exists in this learning path")
+            raise ValueError(
+                "Duplicate path item: order_index or resource already exists in this learning path"
+            )
 
         except Exception as e:
             db.rollback()
@@ -199,10 +218,104 @@ class LearningPathCURD:
         # 预加载 path_items 以及资源对象，按照 order_index 排序
         lp = (
             db.query(LearningPath)
-            .options(
-                joinedload(LearningPath.path_items).joinedload(PathItem.resource)
-            )
+            .options(joinedload(LearningPath.path_items).joinedload(PathItem.resource))
             .filter(LearningPath.id == learning_path_id)
             .first()
         )
         return lp
+
+    @staticmethod
+    def fork_learning_path(
+        db: Session,
+        source_learning_path_id: int,
+        user_id: int,
+    ) -> LearningPath:
+        """Fork a learning path: create a copy owned by the current user."""
+        # Get source path with items
+        source = (
+            db.query(LearningPath)
+            .options(joinedload(LearningPath.path_items))
+            .filter(LearningPath.id == source_learning_path_id)
+            .first()
+        )
+        if not source:
+            raise ValueError("LearningPath not found")
+
+        # Determine root_id (the original source of the fork lineage)
+        source_root_id = getattr(source, "root_id", None) or source.id
+
+        # Create new forked path
+        forked_path = LearningPath(
+            title=source.title,
+            type=getattr(source, "type", None),
+            description=source.description,
+            is_public=False,  # Forked paths are private by default
+            cover_image_url=getattr(source, "cover_image_url", None),
+            category_id=source.category_id,
+            creator_id=user_id,
+            parent_id=source_learning_path_id,
+            root_id=source_root_id,
+            status="draft",
+        )
+        db.add(forked_path)
+
+        # Increment fork_count on source path
+        source.fork_count = (getattr(source, "fork_count", 0) or 0) + 1
+
+        db.commit()
+        db.refresh(forked_path)
+
+        # Copy all path items to the new path
+        for item in source.path_items:
+            new_item = PathItem(
+                learning_path_id=forked_path.id,
+                resource_id=item.resource_id,
+                order_index=item.order_index,
+                stage=getattr(item, "stage", None),
+                purpose=getattr(item, "purpose", None),
+                estimated_time=getattr(item, "estimated_time", None),
+                is_optional=bool(getattr(item, "is_optional", False)),
+            )
+            db.add(new_item)
+
+        # Add user association
+        user_learning_path = UserLearningPath(
+            user_id=user_id, learning_path_id=forked_path.id
+        )
+        db.add(user_learning_path)
+
+        db.commit()
+        db.refresh(forked_path)
+
+        return forked_path
+
+    @staticmethod
+    def get_user_path_status(
+        db: Session,
+        learning_path_id: int,
+        user_id: int,
+    ) -> dict:
+        """Check if path is saved (attached) or forked by user."""
+        # Check if user has attached this path (saved)
+        is_saved = (
+            db.query(UserLearningPath)
+            .filter(
+                UserLearningPath.user_id == user_id,
+                UserLearningPath.learning_path_id == learning_path_id,
+            )
+            .first()
+            is not None
+        )
+
+        # Check if user has already forked this path
+        has_forked = (
+            db.query(LearningPath)
+            .filter(
+                LearningPath.parent_id == learning_path_id,
+                LearningPath.creator_id == user_id,
+            )
+            .first()
+            is not None
+        )
+
+        return {"is_saved": is_saved, "has_forked": has_forked}

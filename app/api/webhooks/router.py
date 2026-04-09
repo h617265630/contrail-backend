@@ -25,7 +25,9 @@ def _safe_json_loads(raw: bytes) -> Any:
         return None
 
 
-def _verify_fastspring_signature(secret: str, body: bytes, signature_header: Optional[str]) -> bool:
+def _verify_fastspring_signature(
+    secret: str, body: bytes, signature_header: Optional[str]
+) -> bool:
     if not secret:
         return True
 
@@ -178,7 +180,10 @@ def _apply_subscription_update(
     if not sub:
         sub = (
             db.query(Subscription)
-            .filter(Subscription.user_id == int(user.id), Subscription.provider == "fastspring")
+            .filter(
+                Subscription.user_id == int(user.id),
+                Subscription.provider == "fastspring",
+            )
             .first()
         )
 
@@ -187,7 +192,9 @@ def _apply_subscription_update(
     if not sub:
         if not plan_code:
             return False
-        sub = Subscription(user_id=int(user.id), provider="fastspring", plan_code=plan_code)
+        sub = Subscription(
+            user_id=int(user.id), provider="fastspring", plan_code=plan_code
+        )
         db.add(sub)
 
     if provider_subscription_id:
@@ -228,7 +235,9 @@ async def fastspring_webhook(request: Request, db: Session = Depends(get_db_dep)
     secret = str(getattr(settings, "FASTSPRING_WEBHOOK_SECRET", "") or "")
     sig = request.headers.get("X-FS-Signature")
     if not _verify_fastspring_signature(secret, body, sig):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature"
+        )
 
     evt = WebhookEvent(provider="fastspring")
     evt.payload_json = body.decode("utf-8", errors="replace") if body else "{}"
@@ -255,7 +264,9 @@ async def fastspring_webhook(request: Request, db: Session = Depends(get_db_dep)
         for event in items:
             event_type = str(event.get("type") or event.get("eventType") or "")
             if not event_type:
-                event_type = str(payload.get("type") or "") if isinstance(payload, dict) else ""
+                event_type = (
+                    str(payload.get("type") or "") if isinstance(payload, dict) else ""
+                )
 
             email = _find_first_email(event)
             if not email:

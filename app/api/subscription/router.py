@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_db_dep
 from app.core.config import settings
 from app.models.subscription import Subscription
-from app.schemas.subscription import SubscriptionMeResponse
+from app.api.subscription.schemas import SubscriptionMeResponse
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
@@ -46,7 +46,9 @@ class DevSeedSubscriptionRequest(BaseModel):
 
 
 @router.get("/me", response_model=SubscriptionMeResponse)
-def get_my_subscription(db: Session = Depends(get_db_dep), current_user=Depends(get_current_user)):
+def get_my_subscription(
+    db: Session = Depends(get_db_dep), current_user=Depends(get_current_user)
+):
     sub = (
         db.query(Subscription)
         .filter(Subscription.user_id == int(current_user.id))
@@ -73,14 +75,21 @@ def dev_seed_my_subscription(
     current_user=Depends(get_current_user),
 ):
     # Dev guard: allow only when running with the default dev SECRET_KEY, or for superusers.
-    if settings.SECRET_KEY != "dev-secret-change-me" and not bool(getattr(current_user, "is_superuser", False)):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Dev endpoint is disabled")
+    if settings.SECRET_KEY != "dev-secret-change-me" and not bool(
+        getattr(current_user, "is_superuser", False)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Dev endpoint is disabled"
+        )
 
     plan_code_raw = str(payload.plan_code or "").strip().lower()
     plan_code = re.sub(r"[^a-z0-9]+", "_", plan_code_raw).strip("_")
     allowed = {"basic_monthly", "basic_yearly", "pro_monthly", "pro_yearly"}
     if plan_code not in allowed:
-        raise HTTPException(status_code=400, detail=f"Invalid plan_code. Allowed: {', '.join(sorted(allowed))}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid plan_code. Allowed: {', '.join(sorted(allowed))}",
+        )
 
     now = datetime.now(timezone.utc)
     duration_days = 365 if plan_code.endswith("yearly") else 30
@@ -88,7 +97,10 @@ def dev_seed_my_subscription(
 
     sub = (
         db.query(Subscription)
-        .filter(Subscription.user_id == int(current_user.id), Subscription.provider == "fastspring")
+        .filter(
+            Subscription.user_id == int(current_user.id),
+            Subscription.provider == "fastspring",
+        )
         .first()
     )
 
