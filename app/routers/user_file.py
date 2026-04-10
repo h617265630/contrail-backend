@@ -1,3 +1,13 @@
+"""
+User file management endpoints.
+
+Provides REST API routes for:
+- Listing user's uploaded files
+- Uploading .md and .txt files
+- Updating file metadata and content
+- Deleting user files
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -17,6 +27,16 @@ router = APIRouter(prefix="/user-files", tags=["user-files"])
 
 
 def _infer_file_type(filename: str, content_type: str | None) -> str:
+    """
+    Infer file type from filename extension and content type header.
+
+    Args:
+        filename: Original filename including extension.
+        content_type: MIME type from upload headers.
+
+    Returns:
+        File type string: "md", "txt", or empty string if unknown.
+    """
     ext = os.path.splitext(filename or "")[1].lower()
     if ext == ".md":
         return "md"
@@ -33,7 +53,22 @@ def _infer_file_type(filename: str, content_type: str | None) -> str:
 
 
 @router.get("/me", response_model=list[UserFileResponse])
-def list_my_files(db: Session = Depends(get_db_dep), current_user=Depends(get_current_user)):
+def list_my_files(
+    db: Session = Depends(get_db_dep),
+    current_user=Depends(get_current_user),
+):
+    """
+    List all files uploaded by the current authenticated user.
+
+    Returns files ordered by creation date (newest first).
+
+    Args:
+        db: Database session.
+        current_user: Authenticated user from dependency.
+
+    Returns:
+        List of UserFileResponse objects.
+    """
     rows = (
         db.query(UserFile)
         .filter(UserFile.user_id == current_user.id)
@@ -50,10 +85,30 @@ async def upload_my_file(
     db: Session = Depends(get_db_dep),
     current_user=Depends(get_current_user),
 ):
+    """
+    Upload a .md or .txt file for the authenticated user.
+
+    The file content is stored both in the database (for content search)
+    and on disk (for serving static file access).
+
+    Args:
+        file: Uploaded file (must be .md or .txt).
+        title: Optional title override for the file.
+        db: Database session.
+        current_user: Authenticated user from dependency.
+
+    Returns:
+        Created UserFileResponse object.
+
+    Raises:
+        HTTPException: 400 if file type is unsupported or file is empty.
+    """
     content_type = (file.content_type or "").lower()
     file_type = _infer_file_type(file.filename or "", content_type)
     if file_type not in {"md", "txt"}:
-        raise HTTPException(status_code=400, detail="Only .md and .txt uploads are supported")
+        raise HTTPException(
+            status_code=400, detail="Only .md and .txt uploads are supported"
+        )
 
     data = await file.read()
     if not data:
@@ -99,6 +154,21 @@ def delete_my_file(
     db: Session = Depends(get_db_dep),
     current_user=Depends(get_current_user),
 ):
+    """
+    Delete a user's own file by ID.
+
+    Deletes both the database record and the underlying static file.
+    File system errors during static file deletion are ignored since
+    the database record deletion is authoritative.
+
+    Args:
+        file_id: ID of the file to delete.
+        db: Database session.
+        current_user: Authenticated user from dependency.
+
+    Raises:
+        HTTPException: 404 if file not found or doesn't belong to user.
+    """
     row = (
         db.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == current_user.id)
@@ -115,7 +185,11 @@ def delete_my_file(
             files_dir = Path("static") / "user_files"
             target = (files_dir / filename).resolve()
             base = files_dir.resolve()
-            if str(target).startswith(str(base)) and target.exists() and target.is_file():
+            if (
+                str(target).startswith(str(base))
+                and target.exists()
+                and target.is_file()
+            ):
                 target.unlink()
     except Exception:
         # Ignore file system errors; DB row deletion is authoritative.
@@ -133,6 +207,24 @@ def update_my_file(
     db: Session = Depends(get_db_dep),
     current_user=Depends(get_current_user),
 ):
+    """
+    Update a user's file title and/or content.
+
+    If content is updated, the corresponding static file on disk
+    is also updated to keep them in sync.
+
+    Args:
+        file_id: ID of the file to update.
+        payload: Update data containing optional title and/or content.
+        db: Database session.
+        current_user: Authenticated user from dependency.
+
+    Returns:
+        Updated UserFileResponse object.
+
+    Raises:
+        HTTPException: 404 if file not found or doesn't belong to user.
+    """
     row = (
         db.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == current_user.id)
