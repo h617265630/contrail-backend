@@ -124,6 +124,7 @@ def get_public_learning_path_detail(
                 purpose=getattr(it, "purpose", None),
                 estimated_time=getattr(it, "estimated_time", None),
                 is_optional=bool(getattr(it, "is_optional", False)),
+                manual_weight=getattr(it, "manual_weight", None),
                 resource_data=resource_data,
             )
         )
@@ -290,6 +291,7 @@ def get_learning_path_detail(
                 purpose=getattr(it, "purpose", None),
                 estimated_time=getattr(it, "estimated_time", None),
                 is_optional=bool(getattr(it, "is_optional", False)),
+                manual_weight=getattr(it, "manual_weight", None),
                 resource_data=resource_data,
             )
         )
@@ -416,6 +418,7 @@ def add_resource_to_learning_path(
             purpose=payload.purpose,
             estimated_time=payload.estimated_time,
             is_optional=payload.is_optional,
+            manual_weight=payload.manual_weight,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -438,6 +441,7 @@ def add_resource_to_learning_path(
         purpose=getattr(item, "purpose", None),
         estimated_time=getattr(item, "estimated_time", None),
         is_optional=bool(getattr(item, "is_optional", False)),
+        manual_weight=getattr(item, "manual_weight", None),
         resource_data=None,
     )
 
@@ -487,6 +491,7 @@ def list_path_items(
             purpose=getattr(it, "purpose", None),
             estimated_time=getattr(it, "estimated_time", None),
             is_optional=bool(getattr(it, "is_optional", False)),
+            manual_weight=getattr(it, "manual_weight", None),
             resource_data=None,
         )
         for it in items
