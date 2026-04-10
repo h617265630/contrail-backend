@@ -60,6 +60,7 @@ class PathItemInLearningPathResponse(BaseModel):
     purpose: Optional[str] = None
     estimated_time: Optional[int] = None
     is_optional: bool = False
+    manual_weight: Optional[int] = None
     # 按需返回嵌入的资源详情
     resource_data: Optional[ResourceResponse] = None
 
@@ -86,6 +87,7 @@ class AddResourceToLearningPathRequest(BaseModel):
     purpose: Optional[str] = None
     estimated_time: Optional[int] = None
     is_optional: Optional[bool] = None
+    manual_weight: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

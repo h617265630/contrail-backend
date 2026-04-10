@@ -15,6 +15,7 @@ class PathItem(Base):
     purpose = Column(String(255), nullable=True)
     estimated_time = Column(Integer, nullable=True)
     is_optional = Column(Boolean, default=False, nullable=False)
+    manual_weight = Column(Integer, nullable=True)
 
     # 关系：PathItem 属于一个学习路径
     learning_path = relationship("LearningPath",  back_populates="path_items")

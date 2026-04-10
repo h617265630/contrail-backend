@@ -145,6 +145,7 @@ class LearningPathCURD:
         purpose: Optional[str] = None,
         estimated_time: Optional[int] = None,
         is_optional: Optional[bool] = None,
+        manual_weight: Optional[int] = None,
     ) -> PathItem:
         # 校验学习路径存在
         lp = db.query(LearningPath).filter(LearningPath.id == learning_path_id).first()
@@ -174,6 +175,7 @@ class LearningPathCURD:
             purpose=purpose,
             estimated_time=estimated_time,
             is_optional=bool(is_optional) if is_optional is not None else False,
+            manual_weight=manual_weight,
         )
 
         db.add(item)
@@ -275,6 +277,7 @@ class LearningPathCURD:
                 purpose=getattr(item, "purpose", None),
                 estimated_time=getattr(item, "estimated_time", None),
                 is_optional=bool(getattr(item, "is_optional", False)),
+                manual_weight=getattr(item, "manual_weight", None),
             )
             db.add(new_item)
 
