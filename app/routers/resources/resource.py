@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db_dep
@@ -331,9 +333,14 @@ def add_public_resource_to_my_resources(
     )
 
 
+class AttachPayload(BaseModel):
+    manual_weight: Optional[int] = None
+
+
 @router.post("/me/{resource_id}/attach", response_model=ResourceAttachResponse)
 def add_public_resource_to_my_resources_with_status(
     resource_id: int,
+    payload: AttachPayload = Body(default=AttachPayload()),
     db: Session = Depends(get_db_dep),
     current_user=Depends(get_current_user),
 ):
@@ -349,7 +356,12 @@ def add_public_resource_to_my_resources_with_status(
     )
 
     try:
-        ResourceCURD.attach_to_user(db, user_id=current_user.id, resource_id=obj.id)
+        ResourceCURD.attach_to_user_with_weight(
+            db,
+            user_id=current_user.id,
+            resource_id=obj.id,
+            manual_weight=payload.manual_weight,
+        )
         db.commit()
     except Exception as e:
         db.rollback()
