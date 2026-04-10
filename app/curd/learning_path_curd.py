@@ -37,6 +37,7 @@ class LearningPathCURD:
             cover_image_url=cover_image_url,
             category_id=category_id,
             creator_id=user_id,
+            status="published",
         )
         db.add(learning_path)
         db.commit()
