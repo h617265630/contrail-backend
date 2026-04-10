@@ -1,0 +1,1 @@
+ALTER TABLE path_items DROP COLUMN IF EXISTS manual_weight;
