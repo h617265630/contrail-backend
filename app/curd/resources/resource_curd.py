@@ -804,7 +804,7 @@ class ResourceCURD:
                 hit.effective_weight = int(manual_weight)
             return
 
-        default_weight = 1 if manual_weight is None else int(manual_weight)
+        default_weight = 100 if manual_weight is None else int(manual_weight)
         db.add(
             UserResource(
                 user_id=user_id,
@@ -865,6 +865,23 @@ class ResourceCURD:
             raise ValueError("Category not found")
 
         resource_type = ResourceCURD._infer_resource_type(normalized, meta)
+
+        # Deduplicate: if resource with same source_url exists, reuse it
+        existing = (
+            db.query(Resource)
+            .filter(Resource.source_url == normalized)
+            .first()
+        )
+        if existing:
+            # Attach to user if not already attached
+            ResourceCURD.attach_to_user_with_weight(
+                db,
+                user_id=user_id,
+                resource_id=existing.id,
+                is_public=is_public,
+                manual_weight=manual_weight,
+            )
+            return existing
 
         platform = meta.get("platform")
         if not platform:
