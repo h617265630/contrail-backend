@@ -8,6 +8,12 @@ from app.models.learning_path import LearningPath
 from app.models.resource import Resource
 from app.models.category import Category
 from app.models.user_learning_path import UserLearningPath
+from app.models.user_resource import UserResource
+from app.models.path_item import PathItem
+from app.models.learning_path_comment import LearningPathComment
+from app.models.resources.video import Video
+from app.models.resources.doc import Doc
+from app.models.resources.article import Article
 from app.schemas.admin import (
     AdminStatsResponse,
     AdminUserItem,
@@ -154,11 +160,14 @@ class AdminCURD:
     @staticmethod
     def delete_learning_path(db: Session, path_id: int) -> bool:
         path = db.query(LearningPath).filter(LearningPath.id == path_id).first()
-        if path:
-            db.delete(path)
-            db.commit()
-            return True
-        return False
+        if not path:
+            return False
+        # Delete related records first (no CASCADE on user_learning_paths, comments)
+        db.query(UserLearningPath).filter(UserLearningPath.learning_path_id == path_id).delete(synchronize_session=False)
+        db.query(LearningPathComment).filter(LearningPathComment.learning_path_id == path_id).delete(synchronize_session=False)
+        db.delete(path)
+        db.commit()
+        return True
 
     @staticmethod
     def get_resources(
@@ -188,11 +197,17 @@ class AdminCURD:
     @staticmethod
     def delete_resource(db: Session, resource_id: int) -> bool:
         resource = db.query(Resource).filter(Resource.id == resource_id).first()
-        if resource:
-            db.delete(resource)
-            db.commit()
-            return True
-        return False
+        if not resource:
+            return False
+        # Delete related records in correct order (avoid SQLAlchemy cascade issues)
+        db.query(UserResource).filter(UserResource.resource_id == resource_id).delete(synchronize_session=False)
+        db.query(PathItem).filter(PathItem.resource_id == resource_id).delete(synchronize_session=False)
+        db.query(Video).filter(Video.resource_id == resource_id).delete(synchronize_session=False)
+        db.query(Doc).filter(Doc.resource_id == resource_id).delete(synchronize_session=False)
+        db.query(Article).filter(Article.resource_id == resource_id).delete(synchronize_session=False)
+        db.delete(resource)
+        db.commit()
+        return True
 
     @staticmethod
     def get_analytics(db: Session, days: int = 30) -> AdminAnalyticsResponse:
