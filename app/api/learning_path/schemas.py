@@ -44,6 +44,7 @@ class LearningPathUpdate(BaseModel):
     is_active: Optional[bool] = None
     cover_image_url: Optional[str] = None
     category_id: Optional[int] = None
+    status: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

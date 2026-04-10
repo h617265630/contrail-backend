@@ -338,6 +338,11 @@ def update_learning_path(
     for key, value in data.items():
         setattr(lp, key, value)
 
+    # Auto-set published_at when status changes to published
+    if data.get("status") == "published" and lp.published_at is None:
+        from datetime import datetime
+        lp.published_at = datetime.utcnow()
+
     try:
         db.add(lp)
         db.commit()
