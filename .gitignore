@@ -1,0 +1,35 @@
+# Environment files - contains sensitive data (DO NOT COMMIT)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Alembic (migrations)
+alembic/versions/*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.sw?

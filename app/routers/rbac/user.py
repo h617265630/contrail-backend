@@ -222,7 +222,7 @@ async def upload_my_avatar(file: UploadFile = File(...), db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Empty file")
     dest_path.write_bytes(data)
 
-    avatar_url = f"http://localhost:8000/static/avatars/{filename}"
+    avatar_url = f"https://api.learnpathly.com/static/avatars/{filename}"
     current_user.avatar_url = avatar_url
     db.add(current_user)
     db.commit()

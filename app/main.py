@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from pathlib import Path
 from app.api.learning_path.router import router as learning_path_router
+from app.api.path_item_note.router import router as path_item_note_router
 from app.api.progress.router import router as progress_router
 from app.api.category.router import router as category_router
 from app.api.admin.router import router as admin_router
@@ -42,6 +43,8 @@ import app.models.learning_path
 import app.models.path_item
 import app.models.category
 import app.models.progress
+import app.models.path_item_note
+import app.models.resource_summary_cache
 import app.models.user_image
 import app.models.user_file
 import app.models.subscription
@@ -97,6 +100,7 @@ def custom_swagger_ui():
 app.include_router(user.router)
 app.include_router(learning_path_router)
 app.include_router(progress_router)
+app.include_router(path_item_note_router)
 app.include_router(category_router)
 app.include_router(reader.router)
 app.include_router(product.router)

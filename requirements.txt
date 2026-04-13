@@ -31,5 +31,14 @@ readability-lxml>=0.8.1
 bleach>=6.0.0
 langchain>=0.3.0
 langchain-openai>=0.2.0
+langchain-community>=0.3
+langchain-core>=0.3
 langgraph>=0.2.0
 streamlit>=1.35.0
+
+# ai_path pipeline dependencies
+tavily-python
+google-search-results
+beautifulsoup4
+lxml
+typing_extensions>=4.0
