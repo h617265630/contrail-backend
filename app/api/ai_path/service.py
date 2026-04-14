@@ -25,13 +25,33 @@ from ai_path.pipeline import build_graph  # noqa: E402
 from ai_path.models.schemas import PipelineState  # noqa: E402
 
 
-# ── Defaults (frontend only sends `query`) ────────────────────────────────────
+# ── Defaults ─────────────────────────────────────────────────────────────────
 
 _DEFAULT_LEVEL = "beginner"
 _DEFAULT_LEARNING_DEPTH = "standard"
 _DEFAULT_CONTENT_TYPE = "mixed"
 _DEFAULT_RESOURCE_COUNT = "standard"
 _DEFAULT_PRACTICAL_RATIO = "balanced"
+
+_VALID_LEVELS = {"beginner", "intermediate", "advanced"}
+_VALID_DEPTHS = {"quick", "standard", "deep"}
+_VALID_CONTENT = {"video", "article", "mixed"}
+_VALID_RATIOS = {"theory_first", "balanced", "practice_first"}
+
+
+def _sanitize(prefs: dict[str, Any] | None) -> dict[str, str]:
+    """Filter and validate preference keys/values."""
+    if not prefs:
+        return {}
+    return {
+        k: v for k, v in prefs.items()
+        if v and (
+            (k == "level" and v in _VALID_LEVELS)
+            or (k == "learning_depth" and v in _VALID_DEPTHS)
+            or (k == "content_type" and v in _VALID_CONTENT)
+            or (k == "practical_ratio" and v in _VALID_RATIOS)
+        )
+    }
 
 
 # ── Output transformation ──────────────────────────────────────────────────────
@@ -106,20 +126,27 @@ def _build_recommendations(data: dict[str, Any], warnings: list[str]) -> list[st
 
 # ── Main service ───────────────────────────────────────────────────────────────
 
-async def generate_ai_path_pipeline(query: str) -> tuple[dict[str, Any], list[str]]:
+async def generate_ai_path_pipeline(
+    query: str,
+    preferences: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     """
     Run the ai_path LangGraph pipeline and return transformed data + warnings.
+
+    preferences may contain: level, learning_depth, content_type, practical_ratio.
+    Unknown or invalid keys/values are silently dropped by _sanitize().
 
     Returns (data, warnings) where data matches AiPathGenerateResponse.data shape.
     """
     graph = build_graph()
+    clean = _sanitize(preferences)
     initial: PipelineState = {
         "topic": query,
-        "level": _DEFAULT_LEVEL,
-        "learning_depth": _DEFAULT_LEARNING_DEPTH,
-        "content_type": _DEFAULT_CONTENT_TYPE,
+        "level": clean.get("level", _DEFAULT_LEVEL),
+        "learning_depth": clean.get("learning_depth", _DEFAULT_LEARNING_DEPTH),
+        "content_type": clean.get("content_type", _DEFAULT_CONTENT_TYPE),
         "resource_count": _DEFAULT_RESOURCE_COUNT,
-        "practical_ratio": _DEFAULT_PRACTICAL_RATIO,
+        "practical_ratio": clean.get("practical_ratio", _DEFAULT_PRACTICAL_RATIO),
         "current_stage": "search",
     }
 
@@ -301,6 +328,7 @@ async def search_resources_pipeline(
     topic: str,
     max_results: int = 10,
     db=None,
+    exclude_urls: list[str] | None = None,
 ) -> list[dict]:
     """
     Search for web resources on a given topic and return summarised results.
@@ -308,6 +336,8 @@ async def search_resources_pipeline(
 
     If db is provided, results are cached by (url, topic) to avoid re-fetching
     and re-summarizing the same URLs within the same topic.
+
+    If exclude_urls is provided, those URLs are filtered from results.
     """
     # Import pipeline stages lazily to avoid circular imports at module load
     from ai_path.pipeline.queries import generate_queries
@@ -324,6 +354,7 @@ async def search_resources_pipeline(
         "resource_count": _DEFAULT_RESOURCE_COUNT,
         "practical_ratio": _DEFAULT_PRACTICAL_RATIO,
         "current_stage": "search",
+        "exclude_urls": list(exclude_urls) if exclude_urls else [],
     }
 
     # Run query generation
@@ -338,11 +369,15 @@ async def search_resources_pipeline(
     # ── Cache layer: check which pages are already cached ──────────────────────
     uncached_pages = []
     cached_results: list[dict] = []
+    exclude_set = set(exclude_urls or [])
 
     if db is not None:
         from app.curd.resource_summary_cache_curd import ResourceSummaryCacheCURD
 
         for page in state.get("fetched_pages", []):
+            # Skip excluded URLs even if cached
+            if page.url in exclude_set:
+                continue
             hit = ResourceSummaryCacheCURD.get(db, url=page.url, topic=topic)
             if hit:
                 import json as _json

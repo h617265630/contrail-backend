@@ -859,10 +859,15 @@ class ResourceCURD:
             raise ValueError("Invalid URL")
 
         if category_id is None:
-            raise ValueError("category_id is required")
-        cat = db.query(Category).filter(Category.id == category_id).first()
-        if not cat:
-            raise ValueError("Category not found")
+            # Use the first available category as default
+            cat = db.query(Category).first()
+            if not cat:
+                raise ValueError("No categories available")
+            category_id = cat.id
+        else:
+            cat = db.query(Category).filter(Category.id == category_id).first()
+            if not cat:
+                raise ValueError("Category not found")
 
         resource_type = ResourceCURD._infer_resource_type(normalized, meta)
 

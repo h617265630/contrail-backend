@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, HttpUrl, Field
 
 class ResourceCreateFromUrl(BaseModel):
     url: HttpUrl
-    category_id: int
+    category_id: Optional[int] = None
     is_public: Optional[bool] = False
     manual_weight: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
@@ -52,7 +52,7 @@ class ResourceResponse(BaseModel):
     summary: Optional[str] = None
     source_url: str
     thumbnail: Optional[str] = None
-    category_id: int
+    category_id: Optional[int] = None
     category_name: Optional[str] = None
     difficulty: Optional[int] = None
     tags: Optional[dict[str, Any]] = None
