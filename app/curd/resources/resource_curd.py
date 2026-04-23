@@ -10,7 +10,7 @@ import time
 
 import httpx
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from pytube import YouTube
 
@@ -840,7 +840,12 @@ class ResourceCURD:
 
     @staticmethod
     def list_all(db: Session) -> list[Resource]:
-        return db.query(Resource).order_by(Resource.id.desc()).all()
+        return (
+            db.query(Resource)
+            .options(joinedload(Resource.category))
+            .order_by(Resource.id.desc())
+            .all()
+        )
 
     @staticmethod
     def create_from_url(

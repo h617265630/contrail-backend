@@ -62,6 +62,7 @@ class LearningPathCURD:
     ) -> List[LearningPath]:
         return (
             db.query(LearningPath)
+            .options(joinedload(LearningPath.category))
             .filter(LearningPath.is_public.is_(True))
             .filter(LearningPath.is_active.is_(True))
             .filter(LearningPath.status == "published")
@@ -76,6 +77,7 @@ class LearningPathCURD:
     ) -> List[LearningPath]:
         learning_paths = (
             db.query(LearningPath)
+            .options(joinedload(LearningPath.category))
             .join(
                 UserLearningPath, UserLearningPath.learning_path_id == LearningPath.id
             )
@@ -218,10 +220,13 @@ class LearningPathCURD:
     def get_learning_path_with_items(
         db: Session, learning_path_id: int
     ) -> Optional[LearningPath]:
-        # 预加载 path_items 以及资源对象，按照 order_index 排序
+        # 预加载 path_items、资源对象、以及 category，按照 order_index 排序
         lp = (
             db.query(LearningPath)
-            .options(joinedload(LearningPath.path_items).joinedload(PathItem.resource))
+            .options(
+                joinedload(LearningPath.category),
+                joinedload(LearningPath.path_items).joinedload(PathItem.resource)
+            )
             .filter(LearningPath.id == learning_path_id)
             .first()
         )

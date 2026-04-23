@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_db_dep
 from app.curd.resources.resource_curd import ResourceCURD
@@ -90,7 +90,12 @@ def get_my_resource_detail(resource_id: int, db: Session = Depends(get_db_dep), 
     if not assoc:
         raise HTTPException(status_code=404, detail="resource not found")
 
-    obj = db.query(Resource).filter(Resource.id == resource_id).first()
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == resource_id)
+        .first()
+    )
     if not obj:
         raise HTTPException(status_code=404, detail="resource not found")
 
@@ -112,10 +117,10 @@ def get_my_resource_detail(resource_id: int, db: Session = Depends(get_db_dep), 
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         manual_weight=getattr(assoc, "manual_weight", None),
         behavior_weight=getattr(assoc, "behavior_weight", None),
         effective_weight=getattr(assoc, "effective_weight", None),
@@ -138,6 +143,7 @@ def list_my_resources(db: Session = Depends(get_db_dep), current_user=Depends(ge
     items = (
         db.query(Resource, UserResource)
         .join(UserResource, UserResource.resource_id == Resource.id)
+        .options(joinedload(Resource.category))  # Eagerly load category to get category_name
         .filter(UserResource.user_id == current_user.id)
         .order_by(Resource.id.desc())
         .all()
@@ -157,7 +163,7 @@ def list_my_resources(db: Session = Depends(get_db_dep), current_user=Depends(ge
             source_url=getattr(r, "source_url", None),
             thumbnail=getattr(r, "thumbnail", None),
             category_id=getattr(r, "category_id", None),
-            category_name=getattr(r, "category_name", None),
+            category_name=getattr(r.category, "name", None) if getattr(r, "category", None) else None,
             difficulty=getattr(r, "difficulty", None),
             tags=getattr(r, "tags", None),
             raw_meta=getattr(r, "raw_meta", None),
@@ -191,7 +197,7 @@ def list_resources(db: Session = Depends(get_db_dep)):
             source_url=getattr(r, "source_url", None),
             thumbnail=getattr(r, "thumbnail", None),
             category_id=getattr(r, "category_id", None),
-            category_name=getattr(r, "category_name", None),
+            category_name=getattr(r.category, "name", None) if getattr(r, "category", None) else None,
             difficulty=getattr(r, "difficulty", None),
             tags=getattr(r, "tags", None),
             raw_meta=getattr(r, "raw_meta", None),
@@ -246,7 +252,12 @@ def search_resources(
 
 @router.get("/{resource_id}", response_model=ResourceDetailResponse)
 def get_resource_detail(resource_id: int, db: Session = Depends(get_db_dep)):
-    obj = db.query(Resource).filter(Resource.id == resource_id).first()
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == resource_id)
+        .first()
+    )
     if not obj:
         raise HTTPException(status_code=404, detail="resource not found")
 
@@ -259,7 +270,7 @@ def get_resource_detail(resource_id: int, db: Session = Depends(get_db_dep)):
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
@@ -297,6 +308,14 @@ def create_my_resource(payload: ResourceCreateFromUrl, db: Session = Depends(get
         .first()
     )
 
+    # Re-fetch obj with category for response
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == obj.id)
+        .first()
+    )
+
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
@@ -306,7 +325,7 @@ def create_my_resource(payload: ResourceCreateFromUrl, db: Session = Depends(get
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
@@ -347,6 +366,14 @@ def add_public_resource_to_my_resources(
         .first()
     )
 
+    # Re-fetch obj with category for response
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == obj.id)
+        .first()
+    )
+
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
@@ -356,7 +383,7 @@ def add_public_resource_to_my_resources(
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
@@ -419,7 +446,7 @@ def add_public_resource_to_my_resources_with_status(
             source_url=getattr(obj, "source_url", None),
             thumbnail=getattr(obj, "thumbnail", None),
             category_id=getattr(obj, "category_id", None),
-            category_name=getattr(obj, "category_name", None),
+            category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
             difficulty=getattr(obj, "difficulty", None),
             tags=getattr(obj, "tags", None),
             raw_meta=getattr(obj, "raw_meta", None),
@@ -498,6 +525,14 @@ def update_my_resource(
         .first()
     )
 
+    # Re-fetch obj with category for response
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == resource_id)
+        .first()
+    )
+
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
@@ -507,7 +542,7 @@ def update_my_resource(
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
@@ -522,30 +557,6 @@ def update_my_resource(
         save_count=getattr(obj, "save_count", None),
         trending_score=getattr(obj, "trending_score", None),
         created_at=getattr(obj, "created_at", None),
-    )
-@router.get("/{resource_id}", response_model=ResourceDetailResponse)
-def get_resource_detail(resource_id: int, db: Session = Depends(get_db_dep)):
-    obj = db.query(Resource).filter(Resource.id == resource_id).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="resource not found")
-
-    return ResourceDetailResponse(
-        id=obj.id,
-        resource_type=_resource_type_value(obj),
-        platform=getattr(obj, "platform", None),
-        title=obj.title,
-        summary=getattr(obj, "summary", None),
-        source_url=getattr(obj, "source_url", None),
-        thumbnail=getattr(obj, "thumbnail", None),
-        category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
-        difficulty=getattr(obj, "difficulty", None),
-        tags=getattr(obj, "tags", None),
-        raw_meta=getattr(obj, "raw_meta", None),
-        created_at=getattr(obj, "created_at", None),
-        video=VideoInfo.model_validate(obj.video) if getattr(obj, "video", None) else None,
-        doc=DocInfo.model_validate(obj.doc) if getattr(obj, "doc", None) else None,
-        article=ArticleInfo.model_validate(obj.article) if getattr(obj, "article", None) else None,
     )
 
 
@@ -576,6 +587,14 @@ def create_my_resource(payload: ResourceCreateFromUrl, db: Session = Depends(get
         .first()
     )
 
+    # Re-fetch obj with category for response
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == obj.id)
+        .first()
+    )
+
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
@@ -585,7 +604,7 @@ def create_my_resource(payload: ResourceCreateFromUrl, db: Session = Depends(get
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
@@ -626,6 +645,14 @@ def add_public_resource_to_my_resources(
         .first()
     )
 
+    # Re-fetch obj with category for response
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == obj.id)
+        .first()
+    )
+
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
@@ -635,7 +662,7 @@ def add_public_resource_to_my_resources(
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),
@@ -698,7 +725,7 @@ def add_public_resource_to_my_resources_with_status(
             source_url=getattr(obj, "source_url", None),
             thumbnail=getattr(obj, "thumbnail", None),
             category_id=getattr(obj, "category_id", None),
-            category_name=getattr(obj, "category_name", None),
+            category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
             difficulty=getattr(obj, "difficulty", None),
             tags=getattr(obj, "tags", None),
             raw_meta=getattr(obj, "raw_meta", None),
@@ -777,6 +804,14 @@ def update_my_resource(
         .first()
     )
 
+    # Re-fetch obj with category for response
+    obj = (
+        db.query(Resource)
+        .options(joinedload(Resource.category))
+        .filter(Resource.id == resource_id)
+        .first()
+    )
+
     return ResourceResponse(
         id=obj.id,
         resource_type=_resource_type_value(obj),
@@ -786,7 +821,7 @@ def update_my_resource(
         source_url=getattr(obj, "source_url", None),
         thumbnail=getattr(obj, "thumbnail", None),
         category_id=getattr(obj, "category_id", None),
-        category_name=getattr(obj, "category_name", None),
+        category_name=getattr(obj.category, "name", None) if getattr(obj, "category", None) else None,
         difficulty=getattr(obj, "difficulty", None),
         tags=getattr(obj, "tags", None),
         raw_meta=getattr(obj, "raw_meta", None),

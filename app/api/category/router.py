@@ -47,9 +47,15 @@ def create_category(
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
 
-    code = (payload.code or "").strip().lower()
-    if not code:
-        code = name.lower().replace(" ", "-")
+    # Generate code with user prefix to avoid conflicts with system categories
+    # User's "AI" → code: u1_ai, System's "AI" → code: ai
+    raw_code = (payload.code or "").strip().lower()
+    if not raw_code:
+        raw_code = name.lower().replace(" ", "_").replace("-", "_")
+    # Remove any existing prefix if user provides custom code
+    if raw_code.startswith("u") and "_" in raw_code:
+        raw_code = raw_code.split("_", 1)[1]
+    code = f"u{current_user.id}_{raw_code}"
 
     exists = db.query(Category).filter(Category.code == code).first()
     if exists:

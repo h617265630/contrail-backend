@@ -21,8 +21,8 @@ if str(_AI_PATH_ROOT) not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(_AI_PATH_ROOT / "ai_path" / ".env")
 
-from ai_path.pipeline import build_graph  # noqa: E402
-from ai_path.models.schemas import PipelineState  # noqa: E402
+from ai_path.pipeline import run_workflow, run_step1, run_step2, run_step3  # noqa: E402
+from ai_path.utils.llm import get_llm  # noqa: E402
 
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
@@ -54,74 +54,103 @@ def _sanitize(prefs: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
-# ── Output transformation ──────────────────────────────────────────────────────
 
-def _transform_learning_path_to_nodes(data: dict[str, Any]) -> list[dict[str, Any]]:
+
+async def generate_ai_path_outline(
+    query: str,
+    preferences: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     """
-    Transform ai_path LearningPath → frontend AiPathNode[].
+    Run Step 1 only (merged with Step 2 - generates outline with sub_nodes in one call).
+    Much faster than Step 1 + Step 2 separately.
 
-    ai_path LearningPath:
-      { topic, level, overview, total_duration_hours,
-        sections: [{ title, description, learning_goals, resources: [ResourceSummary], order }] }
-
-    ResourceSummary:
-      { url, title, summary, key_points, difficulty,
-        resource_type, learning_stage, estimated_minutes }
+    Returns (data, warnings) matching AiPathGenerateResponse.data shape.
     """
-    nodes: list[dict[str, Any]] = []
+    clean = _sanitize(preferences)
 
-    for sec in data.get("sections", []):
-        # Build resource list
-        resources: list[dict[str, Any]] = []
-        for res in sec.get("resources", []):
-            if isinstance(res, dict):
-                resources.append({
-                    "url": res.get("url", ""),
-                    "title": res.get("title", ""),
-                    "description": res.get("summary", ""),
-                })
-            else:
-                # Pydantic model
-                resources.append({
-                    "url": getattr(res, "url", ""),
-                    "title": getattr(res, "title", ""),
-                    "description": getattr(getattr(res, "summary", ""), "summary", ""),
-                })
+    warnings: list[str] = []
 
-        # Build sub_nodes from learning_goals grouped by difficulty/learning_stage
-        # Group key_points into sub_nodes (one sub_node per key_point as a simplification)
-        sub_nodes: list[dict[str, Any]] = []
-        learning_goals: list[str] = sec.get("learning_goals", [])
-        for idx, goal in enumerate(learning_goals):
-            sub_nodes.append({
-                "title": goal,
-                "description": f"Goal {idx + 1} of section '{sec.get('title', '')}'",
-                "learning_points": [goal],
-                "resources": [],
-            })
+    # ── Step 1: Generate outline with sub_nodes (merged Step 1 + Step 2) ────────
+    step1_result = await run_step1(
+        topic=query,
+        level=clean.get("level", _DEFAULT_LEVEL),
+        learning_depth=clean.get("learning_depth", _DEFAULT_LEARNING_DEPTH),
+        content_type=clean.get("content_type", _DEFAULT_CONTENT_TYPE),
+        practical_ratio=clean.get("practical_ratio", _DEFAULT_PRACTICAL_RATIO),
+        resource_count=_DEFAULT_RESOURCE_COUNT,
+    )
+
+    if step1_result.get("search_results"):
+        warnings.append(f"Found {len(step1_result['search_results'])} web results")
+
+    # Extract outline (already contains sub_nodes)
+    outline = step1_result.get("outline")
+    if hasattr(outline, "model_dump"):
+        outline_data = outline.model_dump()
+    elif isinstance(outline, dict):
+        outline_data = outline
+    else:
+        outline_data = {}
+
+    warnings.append(f"Generated {len(outline_data.get('sections', []))} sections with sub_nodes")
+
+    # Build nodes directly from outline (no Step 2 needed)
+    nodes = []
+    for sec in outline_data.get("sections", []):
+        # Build sub_nodes from section's sub_nodes field
+        sub_nodes = []
+        for sub in sec.get("sub_nodes", []):
+            if isinstance(sub, dict):
+                sub_nodes.append({
+                    "title": sub.get("title", ""),
+                    "description": sub.get("description", ""),
+                    "learning_points": sub.get("key_points", []),
+                    "resources": [],
+                })
 
         nodes.append({
             "title": sec.get("title", ""),
             "description": sec.get("description", ""),
-            "learning_points": learning_goals,
-            "resources": resources,
+            "learning_points": sec.get("learning_goals", []),
+            "resources": [],
             "sub_nodes": sub_nodes,
-            "order": sec.get("order", len(nodes) + 1),
+            "order": sec.get("order", len(nodes)),
         })
 
-    return nodes
+    # Build overview text
+    overview = outline_data.get("overview", "") or f"关于「{query}」的完整学习路径，包含 {len(nodes)} 个章节"
 
+    data = {
+        "title": query,
+        "summary": overview,
+        "description": overview,
+        "nodes": nodes,
+        "recommendations": [
+            f"共 {len(nodes)} 个章节",
+            f"约 {outline_data.get('total_duration_hours', 0):.1f} 小时学习时长",
+        ],
+        "_raw": {
+            "total_duration_hours": outline_data.get("total_duration_hours"),
+            "level": outline_data.get("level"),
+        },
+    }
 
-def _build_recommendations(data: dict[str, Any], warnings: list[str]) -> list[str]:
-    """Build recommendations from path metadata."""
-    recs: list[str] = []
-    duration = data.get("total_duration_hours")
-    if duration:
-        recs.append(f"Estimated total time: ~{duration:.1f} hours")
-    level = data.get("level", "")
-    if level:
-        recs.append(f"Designed for: {level} level")
-    return recs
+    # ── Save result to ai_path/result/ ─────────────────────────────────────────
+    try:
+        import json as _json
+        from datetime import datetime as _dt
+        _result_dir = _AI_PATH_ROOT / "ai_path" / "result"
+        _result_dir.mkdir(parents=True, exist_ok=True)
+        _timestamp = _dt.now().strftime("%Y%m%d_%H%M%S")
+        _filename = f"ai_path_outline_{_timestamp}.json"
+        _save_path = _result_dir / _filename
+        with open(_save_path, "w", encoding="utf-8") as _f:
+            _json.dump(data, _f, ensure_ascii=False, indent=2)
+        warnings.append(f"Result saved to {_filename}")
+    except Exception:
+        pass  # Non-blocking, don't fail the request
+
+    return data, warnings
 
 
 # ── Main service ───────────────────────────────────────────────────────────────
@@ -131,96 +160,100 @@ async def generate_ai_path_pipeline(
     preferences: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
-    Run the ai_path LangGraph pipeline and return transformed data + warnings.
+    Run the new 4-step pipeline and return transformed data + warnings.
 
     preferences may contain: level, learning_depth, content_type, practical_ratio.
     Unknown or invalid keys/values are silently dropped by _sanitize().
 
     Returns (data, warnings) where data matches AiPathGenerateResponse.data shape.
     """
-    graph = build_graph()
     clean = _sanitize(preferences)
-    initial: PipelineState = {
-        "topic": query,
-        "level": clean.get("level", _DEFAULT_LEVEL),
-        "learning_depth": clean.get("learning_depth", _DEFAULT_LEARNING_DEPTH),
-        "content_type": clean.get("content_type", _DEFAULT_CONTENT_TYPE),
-        "resource_count": _DEFAULT_RESOURCE_COUNT,
-        "practical_ratio": clean.get("practical_ratio", _DEFAULT_PRACTICAL_RATIO),
-        "current_stage": "search",
-    }
 
-    result: dict[str, Any] = {}
     warnings: list[str] = []
 
-    async for event in graph.astream_events(initial, version="v2"):
-        if event["event"] == "on_chain_end":
-            output = event.get("data", {}).get("output", {})
-            if isinstance(output, dict):
-                if output.get("current_stage"):
-                    result["_stage"] = output["current_stage"]
-                if output.get("queries"):
-                    result["_n_queries"] = len(output["queries"])
-                if output.get("search_results"):
-                    result["_n_results"] = len(output["search_results"])
-                if output.get("fetched_pages"):
-                    result["_n_pages"] = len(output["fetched_pages"])
-                if output.get("summaries"):
-                    result["_n_summaries"] = len(output["summaries"])
-                if output.get("error"):
-                    result["_error"] = output["error"]
-                if output.get("final_report"):
-                    result["final_report"] = output["final_report"]
-                if output.get("learning_path"):
-                    result["learning_path"] = output["learning_path"]
-
-    # Check for error
-    if result.get("_error"):
-        raise RuntimeError(result["_error"])
+    # Run the complete 4-step workflow
+    workflow_result = await run_workflow(
+        topic=query,
+        level=clean.get("level", _DEFAULT_LEVEL),
+        learning_depth=clean.get("learning_depth", _DEFAULT_LEARNING_DEPTH),
+        content_type=clean.get("content_type", _DEFAULT_CONTENT_TYPE),
+        practical_ratio=clean.get("practical_ratio", _DEFAULT_PRACTICAL_RATIO),
+        resource_count=_DEFAULT_RESOURCE_COUNT,
+    )
 
     # Extract data
-    lp_data: dict[str, Any] = {}
-    if result.get("learning_path"):
-        lp = result["learning_path"]
-        if hasattr(lp, "model_dump"):
-            lp_data = lp.model_dump()
-        elif hasattr(lp, "dict"):
-            lp_data = lp.dict()
-        else:
-            lp_data = dict(lp)
+    outline = workflow_result.get("outline")
+    if hasattr(outline, "model_dump"):
+        outline_data = outline.model_dump()
+    else:
+        outline_data = outline or {}
 
-    # Build stage explanations (reuse existing prompt logic)
-    nodes = _transform_learning_path_to_nodes(lp_data)
+    sections_with_resources = workflow_result.get("sections_with_resources", [])
+    if not isinstance(sections_with_resources, list):
+        sections_with_resources = []
+
+    # Build nodes from sections with resources
+    nodes = []
+    for sec in outline_data.get("sections", []):
+        section_title = sec.get("title", "")
+
+        # Find matching section with resources
+        matched_resources = []
+        for swr in sections_with_resources:
+            swr_title = swr.title if hasattr(swr, "title") else swr.get("title", "")
+            if swr_title == section_title:
+                for res in swr.resources if hasattr(swr, "resources") else swr.get("resources", []):
+                    if isinstance(res, dict):
+                        matched_resources.append({
+                            "url": res.get("url", ""),
+                            "title": res.get("title", ""),
+                            "description": res.get("summary", ""),
+                        })
+                break
+
+        # Build sub_nodes from learning_goals
+        sub_nodes = []
+        for idx, goal in enumerate(sec.get("learning_goals", [])):
+            sub_nodes.append({
+                "title": goal,
+                "description": f"Goal {idx + 1} of section '{section_title}'",
+                "learning_points": [goal],
+                "resources": [],
+            })
+
+        nodes.append({
+            "title": section_title,
+            "description": sec.get("description", ""),
+            "learning_points": sec.get("learning_goals", []),
+            "resources": matched_resources,
+            "sub_nodes": sub_nodes,
+            "order": sec.get("order", len(nodes) + 1),
+        })
+
+    # Enrich node explanations
     _enrich_nodes_explanations(nodes, query)
 
-    topic = lp_data.get("topic", query)
-    overview = lp_data.get("overview", result.get("final_report", ""))
-    final_report = result.get("final_report", "")
-
-    # Combine overview + final report as summary
-    summary = overview or (final_report[:300] if final_report else "")
+    final_summary = workflow_result.get("final_summary", "")
+    summary = outline_data.get("overview", "") or (final_summary[:300] if final_summary else "")
 
     data = {
-        "title": topic,
+        "title": query,
         "summary": summary,
         "nodes": nodes,
-        "recommendations": _build_recommendations(lp_data, warnings),
+        "recommendations": [
+            f"Estimated time: ~{outline_data.get('total_duration_hours', 0):.1f} hours",
+            f"Designed for: {outline_data.get('level', 'intermediate')} level",
+        ],
         "_raw": {
-            "total_duration_hours": lp_data.get("total_duration_hours"),
-            "level": lp_data.get("level"),
-            "final_report": final_report,
+            "total_duration_hours": outline_data.get("total_duration_hours"),
+            "level": outline_data.get("level"),
+            "final_summary": final_summary,
+            "github_projects": workflow_result.get("github_projects", []),
         },
     }
 
     # Add metrics as warnings
-    if result.get("_n_queries"):
-        warnings.append(f"Generated {result['_n_queries']} search queries")
-    if result.get("_n_results"):
-        warnings.append(f"Found {result['_n_results']} web results")
-    if result.get("_n_pages"):
-        warnings.append(f"Fetched {result['_n_pages']} pages")
-    if result.get("_n_summaries"):
-        warnings.append(f"Summarised {result['_n_summaries']} resources")
+    warnings.append(f"Found {len(workflow_result.get('exclude_urls', []))} total URLs discovered")
 
     return data, warnings
 
@@ -332,53 +365,46 @@ async def search_resources_pipeline(
 ) -> list[dict]:
     """
     Search for web resources on a given topic and return summarised results.
-    Stages: generate_queries → search_web → fetch_pages → summarize_resources
+
+    Uses the new 4-step pipeline (step1 → step3) to find and summarize resources.
 
     If db is provided, results are cached by (url, topic) to avoid re-fetching
     and re-summarizing the same URLs within the same topic.
 
     If exclude_urls is provided, those URLs are filtered from results.
     """
-    # Import pipeline stages lazily to avoid circular imports at module load
-    from ai_path.pipeline.queries import generate_queries
-    from ai_path.pipeline.search import search_web
-    from ai_path.pipeline.fetch import fetch_pages
-    from ai_path.pipeline.summarize import summarize_resources
-    from ai_path.models.schemas import PipelineState
+    # Step 1: Generate outline + search results
+    step1_result = await run_step1(
+        topic=topic,
+        level=_DEFAULT_LEVEL,
+        learning_depth=_DEFAULT_LEARNING_DEPTH,
+        content_type=_DEFAULT_CONTENT_TYPE,
+        practical_ratio=_DEFAULT_PRACTICAL_RATIO,
+        resource_count=_DEFAULT_RESOURCE_COUNT,
+        exclude_urls=list(exclude_urls) if exclude_urls else None,
+    )
 
-    initial: PipelineState = {
-        "topic": topic,
-        "level": _DEFAULT_LEVEL,
-        "learning_depth": _DEFAULT_LEARNING_DEPTH,
-        "content_type": _DEFAULT_CONTENT_TYPE,
-        "resource_count": _DEFAULT_RESOURCE_COUNT,
-        "practical_ratio": _DEFAULT_PRACTICAL_RATIO,
-        "current_stage": "search",
-        "exclude_urls": list(exclude_urls) if exclude_urls else [],
-    }
+    search_results = step1_result.get("search_results", [])
+    if not isinstance(search_results, list):
+        search_results = []
 
-    # Run query generation
-    state = await generate_queries(initial)
+    # Collect URLs from search results
+    discovered_urls = [r.url if hasattr(r, "url") else r.get("url", "") for r in search_results]
+    discovered_urls = [u for u in discovered_urls if u]
 
-    # Run web search
-    state = await search_web(state)
-
-    # Run page fetch
-    state = await fetch_pages(state)
-
-    # ── Cache layer: check which pages are already cached ──────────────────────
-    uncached_pages = []
+    # ── Cache layer: check which URLs are already cached ──────────────────────
     cached_results: list[dict] = []
+    uncached_urls: list[str] = []
     exclude_set = set(exclude_urls or [])
 
     if db is not None:
         from app.curd.resource_summary_cache_curd import ResourceSummaryCacheCURD
 
-        for page in state.get("fetched_pages", []):
-            # Skip excluded URLs even if cached
-            if page.url in exclude_set:
+        for r in search_results:
+            url = r.url if hasattr(r, "url") else r.get("url", "")
+            if not url or url in exclude_set:
                 continue
-            hit = ResourceSummaryCacheCURD.get(db, url=page.url, topic=topic)
+            hit = ResourceSummaryCacheCURD.get(db, url=url, topic=topic)
             if hit:
                 import json as _json
                 cached_results.append({
@@ -393,34 +419,45 @@ async def search_resources_pipeline(
                     "image": hit.image,
                 })
             else:
-                uncached_pages.append(page)
+                uncached_urls.append(url)
 
-        # Only summarize uncached pages
-        state["fetched_pages"] = uncached_pages
+    # If all cached, return early
+    if db is not None and not uncached_urls:
+        return cached_results[:max_results]
 
-    # Run summarisation (only for uncached pages)
-    state = await summarize_resources(state)
+    # Step 3: Get supplementary resources for outline sections
+    outline = step1_result.get("outline")
+    sections_data = []
+    if outline:
+        if hasattr(outline, "sections"):
+            sections_data = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in outline.sections]
+        elif isinstance(outline, dict):
+            sections_data = outline.get("sections", [])
 
-    # Collect newly summarised results
+    step3_result = await run_step3(
+        sections=sections_data,
+        topic=topic,
+        exclude_urls=list(exclude_set) + discovered_urls,
+    )
+
+    # Collect new results from step 3
     new_results: list[dict] = []
-    for s in state.get("summaries", []):
-        if hasattr(s, "model_dump"):
-            d = s.model_dump()
-        elif hasattr(s, "dict"):
-            d = s.dict()
-        else:
-            d = dict(s)
-        new_results.append({
-            "url": d.get("url", ""),
-            "title": d.get("title", ""),
-            "description": d.get("summary", ""),
-            "key_points": d.get("key_points", []),
-            "difficulty": d.get("difficulty", "beginner"),
-            "resource_type": d.get("resource_type", "article"),
-            "learning_stage": d.get("learning_stage", "core"),
-            "estimated_minutes": d.get("estimated_minutes", 15),
-            "image": d.get("image") or None,
-        })
+    for sec in step3_result.get("sections", []):
+        for res in sec.get("resources", []):
+            if isinstance(res, dict):
+                url = res.get("url", "")
+                if url and url not in exclude_set:
+                    new_results.append({
+                        "url": url,
+                        "title": res.get("title", ""),
+                        "description": res.get("summary", ""),
+                        "key_points": res.get("key_points", []),
+                        "difficulty": res.get("difficulty", "beginner"),
+                        "resource_type": res.get("resource_type", "article"),
+                        "learning_stage": res.get("learning_stage", "core"),
+                        "estimated_minutes": res.get("estimated_minutes", 15),
+                        "image": res.get("image"),
+                    })
 
     # ── Write new results to cache ─────────────────────────────────────────────
     if db is not None and new_results:
@@ -445,3 +482,204 @@ async def search_resources_pipeline(
     # Combine cached + new results
     result = cached_results + new_results
     return result[:max_results]
+
+
+# ── Section Tutorial Generation ───────────────────────────────────────────────
+
+_TUTORIAL_PROMPT_TEMPLATE = """You are an expert educator creating a detailed learning tutorial.
+
+## Learning Context
+- Topic: {query}
+- Section: {section_title}
+- Level: {level}
+- Section Goal: {section_goal}
+
+## Source Resources
+{source_resources}
+
+---
+
+## Task
+Based on the source resources above, write a comprehensive tutorial in markdown format that:
+1. Explains the core concepts clearly with examples
+2. Provides step-by-step guidance
+3. Includes common pitfalls and how to avoid them
+4. Suggests practical exercises or mini-projects
+5. Connects concepts back to the overall learning goal
+
+Write in Chinese. Use clear markdown formatting with headings, code blocks, and bullet points where appropriate.
+
+## Output Format
+Return a single JSON object (no markdown fences):
+{{
+  "tutorial": "<detailed markdown tutorial>",
+  "key_points": ["<key point 1>", "<key point 2>", "<key point 3>", "<key point 4>", "<key point 5>"]
+}}
+"""
+
+
+async def generate_section_tutorial(
+    query: str,
+    section_title: str,
+    section_goal: str,
+    resource_urls: list[str],
+    level: str = "beginner",
+    db=None,
+) -> dict:
+    """
+    Generate a detailed tutorial for a specific learning path section.
+
+    1. Fetch content for each resource URL (from cache or fresh)
+    2. Use LLM to generate a comprehensive tutorial
+    3. Return tutorial markdown + key points
+    """
+    import json as _json
+    from ai_path.tools.fetch import fetch_page
+    from ai_path.models.schemas import FetchedPage
+    from langchain_core.output_parsers import JsonOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
+    from ai_path.utils.llm import get_llm
+
+    # ── Step 1: Gather resource content ───────────────────────────────────────
+    resource_contents: list[str] = []
+
+    for url in resource_urls:
+        content = ""
+        title = url
+
+        # Try cache first
+        if db is not None:
+            from app.curd.resource_summary_cache_curd import ResourceSummaryCacheCURD
+
+            hit = ResourceSummaryCacheCURD.get(db, url=url, topic=query)
+            if hit:
+                title = hit.title or url
+                content = hit.summary or ""
+                if hit.key_points:
+                    try:
+                        kps = _json.loads(hit.key_points)
+                        if isinstance(kps, list) and kps:
+                            content = f"({title})\n" + "\n".join(f"- {kp}" for kp in kps)
+                    except Exception:
+                        pass
+
+        # Fresh fetch if not cached or no cache content
+        if not content and db is None:
+            # No db means skip cache, just fetch
+            page = await _fetch_page_sync(url)
+            title = page.get("title", url)
+            content = page.get("content", "")[:2000]
+        elif not content:
+            # Fetch fresh for this URL
+            page = await _fetch_page_sync(url)
+            title = page.get("title", url)
+            content = page.get("content", "")[:2000]
+
+        if content:
+            resource_contents.append(f"### {title}\nURL: {url}\n{content[:1500]}")
+
+    # Build source resources text
+    source_text = "\n\n".join(resource_contents) if resource_contents else "（未找到资源内容）"
+
+    # ── Step 2: Generate tutorial with LLM ───────────────────────────────────
+    prompt = _TUTORIAL_PROMPT_TEMPLATE.format(
+        query=query,
+        section_title=section_title,
+        section_goal=section_goal,
+        level=level,
+        source_resources=source_text,
+    )
+
+    try:
+        llm = get_llm(temperature=0.3)
+        chain = ChatPromptTemplate.from_template(_TUTORIAL_PROMPT_TEMPLATE) | llm | JsonOutputParser()
+        result_data = await chain.ainvoke({
+            "query": query,
+            "section_title": section_title,
+            "section_goal": section_goal,
+            "level": level,
+            "source_resources": source_text,
+        })
+        tutorial = result_data.get("tutorial", "")
+        key_points = result_data.get("key_points", [])
+    except Exception as exc:
+        # Fallback: return a simple generated tutorial
+        tutorial = _generate_fallback_tutorial(query, section_title, section_goal, level, resource_contents)
+        key_points = _extract_key_points_fallback(resource_contents)
+
+    return {
+        "tutorial": tutorial,
+        "key_points": key_points,
+    }
+
+
+def _generate_fallback_tutorial(
+    query: str,
+    section_title: str,
+    section_goal: str,
+    level: str,
+    resource_contents: list[str],
+) -> str:
+    """Generate a basic tutorial when LLM fails."""
+    content_text = "\n\n".join(resource_contents[:3]) if resource_contents else ""
+    return f"""# {section_title}
+
+## 概述
+{section_goal}
+
+## 学习目标
+- 理解 {section_title} 的核心概念
+- 掌握相关的基础技能
+- 能够独立完成相关练习
+
+## 详细内容
+
+{content_text[:1000] if content_text else '暂无详细内容，请参考上述资源链接。'}
+
+## 实践建议
+1. 先理解核心概念
+2. 完成相关练习
+3. 总结学习笔记
+4. 尝试独立应用
+
+## 注意事项
+- 注重基础概念的理解
+- 多动手实践
+- 及时总结归纳
+"""
+
+
+def _extract_key_points_fallback(resource_contents: list[str]) -> list[str]:
+    """Extract key points from resource contents as fallback."""
+    points = []
+    for content in resource_contents[:3]:
+        # Simple extraction: take first few lines as key points
+        lines = content.split("\n")
+        for line in lines[2:6]:  # Skip title and URL lines
+            line = line.strip().lstrip("-*•").strip()
+            if line and len(line) > 10 and len(line) < 200:
+                points.append(line)
+            if len(points) >= 5:
+                break
+        if len(points) >= 5:
+            break
+    return points[:5]
+
+
+async def _fetch_page_sync(url: str) -> dict:
+    """Fetch a page synchronously (runs in thread pool)."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _sync_fetch_page, url)
+
+
+def _sync_fetch_page(url: str) -> dict:
+    """Synchronous page fetch."""
+    from ai_path.tools.fetch import fetch_page as _fetch_page
+
+    page = _fetch_page(url, fallback_title=url, fallback_snippet="")
+    return {
+        "url": page.url,
+        "title": page.title,
+        "content": page.content,
+        "image": page.image,
+    }

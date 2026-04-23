@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
 from app.core.deps import get_db_dep, get_current_user, PermissionChecker
 from app.models.rbac.user import User
+from app.models.category import Category
 from app.api.admin.schemas import (
     AdminStatsResponse,
     AdminUserListResponse,
@@ -12,6 +13,7 @@ from app.api.admin.schemas import (
     AdminAnalyticsResponse,
 )
 from app.curd.admin_curd import AdminCURD
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -146,3 +148,97 @@ async def get_admin_analytics(
 ):
     """Get analytics data for charts"""
     return AdminCURD.get_analytics(db, days=days)
+
+
+# ── Category Management ─────────────────────────────────────────────────────────
+
+class CategoryCreate(BaseModel):
+    name: str
+    code: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    code: str
+    description: Optional[str]
+    is_system: bool
+    owner_user_id: Optional[int]
+    level: int
+    is_leaf: bool
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/categories", response_model=List[CategoryResponse])
+async def list_all_categories(
+    db: Session = Depends(get_db_dep),
+    current_user: User = Depends(require_superuser),
+):
+    """List all categories (system + user) - superuser only"""
+    categories = db.query(Category).order_by(
+        Category.is_system.desc(), Category.name.asc()
+    ).all()
+    return categories
+
+
+@router.post("/categories", response_model=CategoryResponse)
+async def create_system_category(
+    payload: CategoryCreate,
+    db: Session = Depends(get_db_dep),
+    current_user: User = Depends(require_superuser),
+):
+    """Create a system category - superuser only"""
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    code = (payload.code or "").strip().lower()
+    if not code:
+        code = name.lower().replace(" ", "_").replace("-", "_")
+
+    # Check for duplicate code
+    existing = db.query(Category).filter(Category.code == code).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Category code already exists")
+
+    category = Category(
+        name=name,
+        code=code,
+        description=payload.description,
+        is_system=True,  # Admin creates system category
+        owner_user_id=None,
+        level=0,
+        is_leaf=True,
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return category
+
+
+@router.delete("/categories/{category_id}")
+async def delete_system_category(
+    category_id: int,
+    db: Session = Depends(get_db_dep),
+    current_user: User = Depends(require_superuser),
+):
+    """Delete a system category - superuser only. Cannot delete categories with resources."""
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if not category.is_system:
+        raise HTTPException(status_code=400, detail="Cannot delete user categories via admin")
+
+    # Check if category has resources or learning paths
+    if hasattr(category, 'resources') and category.resources:
+        raise HTTPException(status_code=400, detail="Cannot delete category with associated resources")
+    if hasattr(category, 'learning_paths') and category.learning_paths:
+        raise HTTPException(status_code=400, detail="Cannot delete category with associated learning paths")
+
+    db.delete(category)
+    db.commit()
+    return {"message": "Category deleted"}

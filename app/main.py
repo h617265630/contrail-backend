@@ -12,6 +12,7 @@ from app.routers import user_image
 from app.routers import user_file
 from app.api.trending.router import router as trending_router
 from app.api.ai_path.router import router as ai_path_router
+from app.api.gen_path.router import router as gen_path_router
 from app.routers.rbac import role, user, permission, user_role, role_permission
 from app.core.config import settings
 
@@ -115,6 +116,7 @@ app.include_router(subscription_router)
 app.include_router(webhooks_router)
 app.include_router(trending_router)
 app.include_router(ai_path_router)
+app.include_router(gen_path_router)
 app.include_router(admin_router)
 
 
