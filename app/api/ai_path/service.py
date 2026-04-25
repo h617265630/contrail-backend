@@ -10,19 +10,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Ensure ai_path is importable by adding the project root to sys.path
-# __file__ = backend/app/api/ai_path/service.py
-# parents: 0=ai_path/, 1=api/, 2=app/, 3=backend/, 4=project root
-_AI_PATH_ROOT = Path(__file__).resolve().parents[4]
-if str(_AI_PATH_ROOT) not in sys.path:
-    sys.path.insert(0, str(_AI_PATH_ROOT))
-
 # Load ai_path/.env so API keys are available before importing ai_path modules
 from dotenv import load_dotenv
-load_dotenv(_AI_PATH_ROOT / "ai_path" / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / "ai_path" / ".env")
 
-from ai_path.pipeline import run_workflow, run_step1, run_step2, run_step3  # noqa: E402
-from ai_path.utils.llm import get_llm  # noqa: E402
+from ai_path.pipeline import run_workflow, run_step1, run_step2, run_step3
+from ai_path.utils.llm import get_llm
 
 
 # ── Defaults ─────────────────────────────────────────────────────────────────

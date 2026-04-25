@@ -1,0 +1,42 @@
+# Environment files - contains sensitive data (DO NOT COMMIT)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# AI/ML
+*.pkl
+*.h5
+*.joblib
+*.model
+
+# Data files
+*.csv
+*.xlsx
+*.json
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.sw?
