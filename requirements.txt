@@ -1,6 +1,11 @@
 fastapi>=0.103.0
 uvicorn[standard]>=0.20.0
-sqlalchemy>=1.4
+# SQLAlchemy 2.1 把 postgresql:// 的默认 driver 从 psycopg2 换成了 psycopg3，
+# 而下面只装了 psycopg2-binary → create_engine("postgresql://...") 会抛
+# ModuleNotFoundError: No module named 'psycopg'（启动即崩）。
+# 本项目是在 2.0.x 上开发验证的，先钉住上限；app/core/config.py 里
+# 另有 _normalize_db_url() 显式写死 psycopg2 driver 兜底。
+sqlalchemy>=1.4,<2.1
 sqlmodel>=0.0.6
 python-jose[cryptography]>=3.3.0
 # passlib 1.7.x 与部分新版 bcrypt 在初始化自检时会因 >72 bytes 密码限制抛错；

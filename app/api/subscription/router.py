@@ -6,7 +6,7 @@ import re
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db_dep
-from app.core.config import settings
+from app.core.config import INSECURE_DEFAULT_SECRET_KEY, settings
 from app.models.subscription import Subscription
 from app.api.subscription.schemas import SubscriptionMeResponse
 
@@ -75,7 +75,7 @@ def dev_seed_my_subscription(
     current_user=Depends(get_current_user),
 ):
     # Dev guard: allow only when running with the default dev SECRET_KEY, or for superusers.
-    if settings.SECRET_KEY != "dev-secret-change-me" and not bool(
+    if settings.SECRET_KEY != INSECURE_DEFAULT_SECRET_KEY and not bool(
         getattr(current_user, "is_superuser", False)
     ):
         raise HTTPException(
