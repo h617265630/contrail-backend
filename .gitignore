@@ -51,3 +51,6 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Supabase CLI 本地缓存（含 project-ref / pooler-url，勿提交）
+supabase/.temp/
